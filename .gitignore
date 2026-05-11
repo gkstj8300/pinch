@@ -1,0 +1,32 @@
+# Node
+node_modules/
+dist/
+*.log
+.npm/
+.pnpm-store/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Prisma
+prisma/migrations/dev/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+.nyc_output/
+
+# k6 결과
+k6/results/
+
+# Claude Code (사용자별 설정)
+.claude/settings.local.json
