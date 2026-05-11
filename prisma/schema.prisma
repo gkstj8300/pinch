@@ -1,0 +1,126 @@
+// =====================================================
+// PINCH - Slice 1 PoC 스키마
+// 목적: 선착순 매칭 동시성 검증
+// 범위: User / Job / Match 3개 테이블만
+// (Wallet, Transaction, Review 등은 [B] 단계에서 추가)
+// =====================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+enum UserRole {
+  WORKER
+  CLIENT
+  ADMIN
+}
+
+enum JobStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum MatchStatus {
+  PENDING
+  MATCHED
+  CHECKED_IN
+  CHECKED_OUT
+  COMPLETED
+  NOSHOW
+  CANCELLED
+}
+
+model User {
+  id            BigInt    @id @default(autoincrement())
+  phone         String    @unique @db.VarChar(20)
+  name          String    @db.VarChar(50)
+  role          UserRole
+  isVerified    Boolean   @default(false) @map("is_verified")
+  pinchScore    Int       @default(1000) @map("pinch_score")
+
+  jobsCreated   Job[]     @relation("ClientJobs")
+  matches       Match[]   @relation("WorkerMatches")
+
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([role, deletedAt])
+  @@map("users")
+}
+
+model Job {
+  id               BigInt    @id @default(autoincrement())
+  clientId         BigInt    @map("client_id")
+
+  title            String    @db.VarChar(120)
+  description      String    @db.Text
+  category         String    @db.VarChar(40)
+
+  address          String    @db.VarChar(255)
+  latitude         Decimal   @db.Decimal(10, 7)
+  longitude        Decimal   @db.Decimal(10, 7)
+  // PostGIS Point — 트리거로 lat/lng와 동기화 (migration SQL에서 정의)
+  location         Unsupported("geography(Point, 4326)")?
+
+  startAt          DateTime  @map("start_at") @db.Timestamptz(6)
+  endAt            DateTime  @map("end_at") @db.Timestamptz(6)
+  hourlyWage       Int       @map("hourly_wage")
+  estimatedMinutes Int       @map("estimated_minutes")
+
+  recruitCount     Int       @map("recruit_count")
+  confirmedCount   Int       @default(0) @map("confirmed_count")
+
+  minPinchScore    Int       @default(0) @map("min_pinch_score")
+  requireVerified  Boolean   @default(true) @map("require_verified")
+  checkInRadiusM   Int       @default(150) @map("check_in_radius_m")
+
+  status           JobStatus @default(OPEN)
+
+  client           User      @relation("ClientJobs", fields: [clientId], references: [id])
+  matches          Match[]
+
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([status, startAt, deletedAt])
+  @@index([clientId, deletedAt])
+  @@index([category, status, startAt])
+  @@index([latitude, longitude])
+  @@map("jobs")
+}
+
+model Match {
+  id           BigInt       @id @default(autoincrement())
+  jobId        BigInt       @map("job_id")
+  workerId     BigInt       @map("worker_id")
+
+  status       MatchStatus  @default(PENDING)
+
+  appliedAt    DateTime     @default(now()) @map("applied_at") @db.Timestamptz(6)
+  matchedAt    DateTime?    @map("matched_at") @db.Timestamptz(6)
+
+  job          Job          @relation(fields: [jobId], references: [id])
+  worker       User         @relation("WorkerMatches", fields: [workerId], references: [id])
+
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime?    @map("deleted_at") @db.Timestamptz(6)
+
+  @@unique([jobId, workerId])
+  @@index([workerId, status])
+  @@index([jobId, status])
+  @@map("matches")
+}

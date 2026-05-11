@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgis/postgis:17-3.5
+    container_name: pinch-postgres
+    environment:
+      POSTGRES_USER: pinch
+      POSTGRES_PASSWORD: pinch
+      POSTGRES_DB: pinch_dev
+      TZ: Asia/Seoul
+    ports:
+      - "5432:5432"
+    volumes:
+      - pinch_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pinch -d pinch_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pinch_pg_data:

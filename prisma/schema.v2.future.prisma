@@ -1,0 +1,184 @@
+// =====================================================
+// PINCH - 스키마 v2 (Slice 2/3 에서 활성화)
+//
+// 이 파일은 schema.prisma 가 아니며 실제로 컴파일되지 않는다.
+// Slice 1 PoC 검증 완료 후, 아래 모델/필드를 schema.prisma 에 병합한다.
+//
+// 변경 이력 v0.1.0 → v0.2.0
+//   - Step 3 의사코드 설계 중 발견된 컬럼 보강
+//   - Wallet/Transaction/Review 추가 (Slice 2/3)
+//   - 본인인증(CI/DI) 필드 추가 (Slice 3)
+// =====================================================
+
+// ---------------------------------------------------------------------------
+// USER — Slice 3 (본인인증) 활성화 시 추가
+// ---------------------------------------------------------------------------
+//
+// enum VerificationStatus {
+//   UNVERIFIED
+//   PENDING
+//   VERIFIED
+//   REJECTED
+// }
+//
+// model User {
+//   // (Slice 1 기존 필드 유지)
+//
+//   email              String?            @unique @db.VarChar(255)
+//   profileImg         String?            @map("profile_img")
+//
+//   // 본인인증 (NICE/다날 응답 해시)
+//   verificationStatus VerificationStatus @default(UNVERIFIED) @map("verification_status")
+//   ciHash             String?            @unique @map("ci_hash") @db.Char(88)  // SHA-512 hex
+//   diHash             String?            @map("di_hash") @db.Char(88)
+//   verifiedAt         DateTime?          @map("verified_at") @db.Timestamptz(6)
+//
+//   // 핀치 스코어 구성 요소
+//   ratingAvg          Decimal            @default(0) @db.Decimal(3, 2) @map("rating_avg")
+//   totalReviews       Int                @default(0) @map("total_reviews")
+//   completedCount     Int                @default(0) @map("completed_count")
+//   noshowCount        Int                @default(0) @map("noshow_count")
+//   lateCount          Int                @default(0) @map("late_count")
+//   cancelCount        Int                @default(0) @map("cancel_count")
+//
+//   wallet             Wallet?
+//   reviewsWritten     Review[]           @relation("ReviewWriter")
+//   reviewsReceived    Review[]           @relation("ReviewTarget")
+//
+//   @@index([pinchScore(sort: Desc)])
+// }
+
+// ---------------------------------------------------------------------------
+// MATCH — Slice 2 (출퇴근 + 정산) 활성화 시 추가
+// ---------------------------------------------------------------------------
+//
+// model Match {
+//   // (Slice 1 기존 필드 유지)
+//
+//   checkInAt        DateTime? @map("check_in_at") @db.Timestamptz(6)
+//   checkOutAt       DateTime? @map("check_out_at") @db.Timestamptz(6)
+//   completedAt      DateTime? @map("completed_at") @db.Timestamptz(6)
+//   cancelledAt      DateTime? @map("cancelled_at") @db.Timestamptz(6)
+//   cancelReason     String?   @map("cancel_reason") @db.VarChar(255)
+//
+//   // GPS 인증 (audit)
+//   checkInLat       Decimal?  @db.Decimal(10, 7) @map("check_in_lat")
+//   checkInLng       Decimal?  @db.Decimal(10, 7) @map("check_in_lng")
+//   checkInDistance  Int?      @map("check_in_distance_m")
+//   qrToken          String?   @map("qr_token") @db.VarChar(64)
+//
+//   // 정산 스냅샷 (3.3% 원천세)
+//   workedMinutes    Int?      @map("worked_minutes")
+//   grossAmount      Int?      @map("gross_amount")        // 세전
+//   withholdingTax   Int?      @map("withholding_tax")     // 3.3%
+//   netAmount        Int?      @map("net_amount")          // 실수령
+//
+//   transactions     Transaction[]
+//   reviews          Review[]
+// }
+
+// ---------------------------------------------------------------------------
+// WALLET / TRANSACTION (Ledger) — Slice 2 활성화
+// ---------------------------------------------------------------------------
+//
+// enum TransactionType {
+//   EARNING         // 업무 완료 적립 (세전)
+//   WITHHOLDING     // 3.3% 원천세 차감 (음수)
+//   WITHDRAWAL      // 출금
+//   REFUND
+//   ADJUSTMENT
+//   PENALTY
+// }
+//
+// enum TransactionStatus {
+//   PENDING
+//   COMPLETED
+//   FAILED
+//   CANCELLED
+// }
+//
+// model Wallet {
+//   id              BigInt    @id @default(autoincrement())
+//   userId          BigInt    @unique @map("user_id")
+//
+//   balance         Int       @default(0)                          // 출금 가능 잔액
+//   pendingAmount   Int       @default(0) @map("pending_amount")   // 정산 대기액
+//   totalEarned     Int       @default(0) @map("total_earned")     // 누적 세전 수입
+//   totalWithheld   Int       @default(0) @map("total_withheld")   // 누적 원천세
+//   totalWithdrawn  Int       @default(0) @map("total_withdrawn")
+//
+//   // pgcrypto 로 암호화 후 저장 (Slice 3)
+//   bankCode        String?   @map("bank_code") @db.VarChar(10)
+//   bankAccountEnc  String?   @map("bank_account_enc") @db.Text
+//
+//   user            User      @relation(fields: [userId], references: [id])
+//   transactions    Transaction[]
+//
+//   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+//   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+//   deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+//
+//   @@map("wallets")
+// }
+//
+// model Transaction {
+//   id              BigInt              @id @default(autoincrement())
+//   walletId        BigInt              @map("wallet_id")
+//   matchId         BigInt?             @map("match_id")
+//
+//   type            TransactionType
+//   status          TransactionStatus   @default(PENDING)
+//
+//   grossAmount     Int                 @map("gross_amount")
+//   withholdingTax  Int                 @default(0) @map("withholding_tax")
+//   netAmount       Int                 @map("net_amount")
+//
+//   // Append-only ledger audit
+//   balanceBefore   Int                 @map("balance_before")
+//   balanceAfter    Int                 @map("balance_after")
+//
+//   description     String?             @db.VarChar(255)
+//   externalRef     String?             @map("external_ref") @db.VarChar(100)
+//   idempotencyKey  String?             @unique @map("idempotency_key") @db.VarChar(100)
+//
+//   processedAt     DateTime?           @map("processed_at") @db.Timestamptz(6)
+//
+//   wallet          Wallet              @relation(fields: [walletId], references: [id])
+//   match           Match?              @relation(fields: [matchId], references: [id])
+//
+//   createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+//   updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+//   deletedAt       DateTime?           @map("deleted_at") @db.Timestamptz(6)
+//
+//   @@index([walletId, createdAt(sort: Desc)])
+//   @@index([type, status])
+//   @@index([matchId])
+//   @@index([externalRef])
+//   @@map("transactions")
+// }
+
+// ---------------------------------------------------------------------------
+// REVIEW — Slice 2 활성화
+// ---------------------------------------------------------------------------
+//
+// model Review {
+//   id         BigInt    @id @default(autoincrement())
+//   matchId    BigInt    @map("match_id")
+//   writerId   BigInt    @map("writer_id")
+//   targetId   BigInt    @map("target_id")
+//
+//   score      Int       // 1~5 (CHECK 제약: post-init.sql)
+//   comment    String?   @db.Text
+//
+//   match      Match     @relation(fields: [matchId], references: [id])
+//   writer     User      @relation("ReviewWriter", fields: [writerId], references: [id])
+//   target     User      @relation("ReviewTarget", fields: [targetId], references: [id])
+//
+//   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+//   updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+//   deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
+//
+//   @@unique([matchId, writerId])
+//   @@index([targetId, deletedAt])
+//   @@map("reviews")
+// }
