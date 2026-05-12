@@ -5,7 +5,7 @@
 | 항목 | 내용 |
 |------|------|
 | 문서명 | 구현 및 테스트 가이드라인 |
-| 버전 | v1.0.0 |
+| 버전 | v1.0.1 |
 | 작성일 | 2026-05-12 |
 | 기반 문서 | 없음 |
 
@@ -14,6 +14,7 @@
 | 버전 | 날짜 | 작성자 | 변경 내용 |
 |------|------|--------|-----------|
 | v1.0.0 | 2026-05-12 | — | 문서 템플릿 규격 적용 — Python 스크립트 래퍼 제거, 문서 정보·변경 이력·섹션 번호 체계 도입. 본문 내용 보존 |
+| v1.0.1 | 2026-05-12 | — | 파일명 오타 수정 (test-cuide.md → test-guide.md) + §5 에서 PINCH 현재 범위 밖 스택 제거 (Frontend, Python Backend, Mobile) — Node.js 만 유지 |
 
 ---
 
@@ -55,10 +56,7 @@
 
 ## 5. 기술 스택별 테스트 도구 (Tools)
 
-- **Frontend (React/Vue/JS):** Jest, React Testing Library, Vitest, Cypress (E2E)
-- **Backend (Python):** Pytest, unittest
 - **Backend (Node.js):** Jest, Mocha, Supertest
-- **Mobile (Flutter/Dart):** Dart Test, Widget Tester
 
 ---
 
