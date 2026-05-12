@@ -16,7 +16,7 @@
     "db:down": "docker compose down",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset --force",
-    "db:seed": "tsx prisma/seed.ts",
+    "db:seed": "tsx --env-file=.env prisma/seed.ts",
     "db:studio": "prisma studio",
     "prisma:generate": "prisma generate",
     "stress": "k6 run k6/apply-stress.js"
