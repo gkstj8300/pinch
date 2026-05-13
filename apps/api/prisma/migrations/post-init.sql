@@ -46,8 +46,19 @@ ALTER TABLE jobs
        CHECK (hourly_wage >= 9860);  -- 2026 최저시급 (필요 시 환경별 조정)
 
 -- 4. Soft Delete + 활성 데이터용 부분 인덱스 (Prisma @@index는 WHERE 미지원)
-CREATE INDEX IF NOT EXISTS users_active_phone_idx
-  ON users(phone) WHERE deleted_at IS NULL;
+DROP INDEX IF EXISTS users_active_phone_idx;
+CREATE INDEX IF NOT EXISTS users_active_email_idx
+  ON users(email) WHERE deleted_at IS NULL;
+
+-- 별명(name) 중복 방지 — 활성 사용자 한정 (디자인의 "별명 (중복 불가)" 요구사항)
+CREATE UNIQUE INDEX IF NOT EXISTS users_active_name_key
+  ON users(name) WHERE deleted_at IS NULL;
+
+-- 자체 가입(password_hash) 또는 OAuth(oauth_provider) 중 하나는 반드시 존재
+ALTER TABLE users
+  DROP CONSTRAINT IF EXISTS chk_users_auth_method,
+  ADD  CONSTRAINT chk_users_auth_method
+       CHECK (password_hash IS NOT NULL OR oauth_provider IS NOT NULL);
 
 CREATE INDEX IF NOT EXISTS matches_active_worker_idx
   ON matches(worker_id, status) WHERE deleted_at IS NULL;
