@@ -12,6 +12,14 @@
 
 프론트엔드 코드를 작성하거나 수정할 때 반드시 `.claude/rules/frontend-coding-rules.md`를 먼저 읽고 해당 규칙을 따른다.
 
+## 프론트엔드 폴더 구조 (FSD)
+
+Worker Mobile(RN+Expo) / Client Web(React) 신규 코드는 `.claude/rules/frontend-architecture.md`의 Feature-Sliced Design 규칙을 따른다.
+
+- 6개 레이어: `app / pages / widgets / features / entities / shared`
+- 상위→하위 단방향 의존, 동일 레이어 slice 간 import 금지
+- 각 slice 는 `index.ts` 만 외부에 노출 (Public API)
+
 ## 구현 및 테스트 가이드
 
 코드를 작성하거나 수정한 직후 반드시 `.claude/rules/test-guide.md`의 테스트 절차를 따른다.
