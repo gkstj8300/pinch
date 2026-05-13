@@ -51,3 +51,56 @@ CREATE INDEX IF NOT EXISTS users_active_phone_idx
 
 CREATE INDEX IF NOT EXISTS matches_active_worker_idx
   ON matches(worker_id, status) WHERE deleted_at IS NULL;
+
+-- =====================================================
+-- 5. Slice 2 추가분 — Wallet / Transaction / Review
+-- =====================================================
+
+-- 5.1 Review score 범위 검증
+ALTER TABLE reviews
+  DROP CONSTRAINT IF EXISTS chk_reviews_score,
+  ADD  CONSTRAINT chk_reviews_score
+       CHECK (score BETWEEN 1 AND 5);
+
+-- 5.2 Review 자기 평가 금지 (writer != target)
+ALTER TABLE reviews
+  DROP CONSTRAINT IF EXISTS chk_reviews_no_self,
+  ADD  CONSTRAINT chk_reviews_no_self
+       CHECK (writer_id <> target_id);
+
+-- 5.3 Wallet 금액 무결성
+ALTER TABLE wallets
+  DROP CONSTRAINT IF EXISTS chk_wallets_balance_nonneg,
+  ADD  CONSTRAINT chk_wallets_balance_nonneg
+       CHECK (balance >= 0);
+
+ALTER TABLE wallets
+  DROP CONSTRAINT IF EXISTS chk_wallets_pending_nonneg,
+  ADD  CONSTRAINT chk_wallets_pending_nonneg
+       CHECK (pending_amount >= 0);
+
+ALTER TABLE wallets
+  DROP CONSTRAINT IF EXISTS chk_wallets_totals_nonneg,
+  ADD  CONSTRAINT chk_wallets_totals_nonneg
+       CHECK (total_earned >= 0 AND total_withheld >= 0 AND total_withdrawn >= 0);
+
+-- 5.4 Match 정산 스냅샷 무결성 (gross/net 은 음수 될 수 없음, COMPLETED 시 모두 NOT NULL 권장이나 강제는 안 함)
+ALTER TABLE matches
+  DROP CONSTRAINT IF EXISTS chk_matches_settlement_nonneg,
+  ADD  CONSTRAINT chk_matches_settlement_nonneg
+       CHECK (
+         (gross_amount IS NULL OR gross_amount >= 0) AND
+         (withholding_tax IS NULL OR withholding_tax >= 0) AND
+         (net_amount IS NULL OR net_amount >= 0) AND
+         (worked_minutes IS NULL OR worked_minutes >= 0)
+       );
+
+-- 5.5 활성 데이터 부분 인덱스
+CREATE INDEX IF NOT EXISTS wallets_active_user_idx
+  ON wallets(user_id) WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS transactions_active_wallet_idx
+  ON transactions(wallet_id, created_at DESC) WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS reviews_active_target_idx
+  ON reviews(target_id) WHERE deleted_at IS NULL;

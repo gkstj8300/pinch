@@ -13,7 +13,10 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 시드 시작');
 
-  // 모든 데이터 초기화 (PoC 단계)
+  // 모든 데이터 초기화 (PoC 단계) — FK 의존성 역순으로 삭제
+  await prisma.review.deleteMany();
+  await prisma.transaction.deleteMany();
+  await prisma.wallet.deleteMany();
   await prisma.match.deleteMany();
   await prisma.job.deleteMany();
   await prisma.user.deleteMany();
