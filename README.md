@@ -15,6 +15,7 @@
 | 설계서 (서비스 전반) | [.claude/설계서.md](./.claude/설계서.md) |
 | 실행 가이드 (셋업·시드·부하 테스트) | [.claude/docs/실행가이드.md](./.claude/docs/실행가이드.md) |
 | API 명세 (5개 핵심 엔드포인트) | [.claude/docs/API명세.md](./.claude/docs/API명세.md) |
+| 디자인 시스템 v0 (토큰·컴포넌트) | [.claude/docs/디자인시스템.md](./.claude/docs/디자인시스템.md) |
 | 프로젝트 규칙 | [.claude/rules/](./.claude/rules/) |
 
 ---
