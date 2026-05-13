@@ -6,12 +6,14 @@ import { MatchesModule } from './matches/matches.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { SettlementModule } from './settlement/settlement.module';
 import { ReviewModule } from './review/review.module';
+import { JobsModule } from './jobs/jobs.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     AuthModule,
+    JobsModule,
     MatchesModule,
     AttendanceModule,
     SettlementModule,
