@@ -1,25 +1,24 @@
 /**
- * PINCH Slice 1 — 선착순 매칭 동시성 부하 테스트
+ * PINCH Slice 1+2 — 선착순 매칭 동시성 부하 테스트 (JWT 인증 포함)
  *
  * 시나리오:
- *   200 VUs 가 동시에 모집 1명 공고에 지원.
- *   기대 결과:
- *     - HTTP 201 (MATCHED) 정확히 1건
- *     - HTTP 409 (CAPACITY_FULL 등) 199건
- *     - DB의 jobs.confirmed_count = 1
- *     - DB의 matches 레코드 = 1건
+ *   setup 단계에서 200명 워커 각자 dev-login 으로 JWT 발급 →
+ *   default 단계에서 200 VUs 가 동시에 모집 1명 공고에 지원.
+ *
+ * 기대 결과:
+ *   - HTTP 201 (MATCHED) 정확히 1건
+ *   - HTTP 409 (CAPACITY_FULL 등) 199건
+ *   - DB의 jobs.confirmed_count = 1
  *
  * 실행:
- *   pnpm db:seed   # → JOB_ID, WORKER_ID_START 출력
- *   JOB_ID=1 WORKER_ID_START=2 k6 run k6/apply-stress.js
- *
- * Docker로 실행할 경우:
- *   docker run --rm -i --network=host \
- *     -e JOB_ID=1 -e WORKER_ID_START=2 \
- *     -v "$PWD/k6:/scripts" grafana/k6 run /scripts/apply-stress.js
+ *   pnpm db:seed   # JOB_ID, WORKER_ID_START 출력
+ *   MSYS_NO_PATHCONV=1 docker run --rm -i \
+ *     -e BASE_URL=http://host.docker.internal:3000 \
+ *     -e JOB_ID=<id> -e WORKER_ID_START=<id> \
+ *     -v "$(pwd)/k6:/scripts" grafana/k6 run /scripts/apply-stress.js
  */
 import http from 'k6/http';
-import { check, sleep } from 'k6';
+import { check } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
 import exec from 'k6/execution';
 
@@ -31,34 +30,57 @@ export const options = {
       executor: 'per-vu-iterations',
       vus: VUS,
       iterations: 1,
-      maxDuration: '30s',
+      maxDuration: '60s',
     },
   },
   thresholds: {
-    matched_total: ['count==1'],          // 정확히 1명만 매칭
-    conflict_total: [`count==${VUS - 1}`], // 나머지 모두 409
-    http_req_duration: ['p(99)<300'],     // P99 < 300ms
+    matched_total: ['count==1'],
+    conflict_total: [`count==${VUS - 1}`],
+    http_req_duration: ['p(99)<500'], // 인증 추가로 여유
   },
 };
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
 const JOB_ID = Number(__ENV.JOB_ID || 1);
-const WORKER_ID_START = Number(__ENV.WORKER_ID_START || 2);
 
 const matchedTotal = new Counter('matched_total');
 const conflictTotal = new Counter('conflict_total');
 const otherTotal = new Counter('other_total');
 const latencyTrend = new Trend('apply_latency_ms');
 
-export default function () {
-  // 각 VU 가 고유 워커 ID 사용
-  const workerId = WORKER_ID_START + exec.vu.idInTest - 1;
+/**
+ * setup: 200명 워커의 JWT 를 사전 발급 (스트레스 단계의 외란 제거).
+ * seed.ts 가 만든 phone 패턴 `0101000XXXX` 를 그대로 사용.
+ */
+export function setup() {
+  const tokens = [];
+  const headers = { 'Content-Type': 'application/json' };
+  for (let i = 0; i < VUS; i++) {
+    const phone = `0101000${String(i).padStart(4, '0')}`;
+    const res = http.post(
+      `${BASE_URL}/auth/dev-login`,
+      JSON.stringify({ phone, role: 'WORKER' }),
+      { headers },
+    );
+    if (res.status !== 200) {
+      throw new Error(`dev-login failed for ${phone}: ${res.status} ${res.body}`);
+    }
+    const body = JSON.parse(res.body);
+    tokens.push(body.accessToken);
+  }
+  return { tokens };
+}
 
-  const payload = JSON.stringify({ jobId: JOB_ID, workerId });
-  const params = { headers: { 'Content-Type': 'application/json' } };
+export default function (data) {
+  const token = data.tokens[exec.vu.idInTest - 1];
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
+  const payload = JSON.stringify({ jobId: JOB_ID });
 
   const t0 = Date.now();
-  const res = http.post(`${BASE_URL}/matches/apply`, payload, params);
+  const res = http.post(`${BASE_URL}/matches/apply`, payload, { headers });
   latencyTrend.add(Date.now() - t0);
 
   if (res.status === 201) {
@@ -83,12 +105,12 @@ export function handleSummary(data) {
 
   const verdict =
     matched === 1 && conflict === VUS - 1 && other === 0
-      ? '✅ PASS - 동시성 차단 확인'
-      : '❌ FAIL - race condition 발생 가능';
+      ? '✅ PASS - 동시성 차단 확인 (JWT 인증 포함)'
+      : '❌ FAIL - race condition 또는 인증 실패';
 
   const summary = `
 ==============================================
-  PINCH Slice 1 — 선착순 매칭 동시성 결과
+  PINCH Slice 1+2 — 선착순 매칭 + JWT 동시성 결과
 ==============================================
   VUs            : ${VUS}
   MATCHED (201)  : ${matched}  (기대값 1)
@@ -100,7 +122,5 @@ export function handleSummary(data) {
 ==============================================
 `;
 
-  return {
-    stdout: summary,
-  };
+  return { stdout: summary };
 }
