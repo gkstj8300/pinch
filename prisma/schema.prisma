@@ -1,8 +1,10 @@
 // =====================================================
-// PINCH - Slice 1 PoC 스키마
-// 목적: 선착순 매칭 동시성 검증
-// 범위: User / Job / Match 3개 테이블만
-// (Wallet, Transaction, Review 등은 [B] 단계에서 추가)
+// PINCH - Slice 2 스키마 (출퇴근 + 정산 + 리뷰)
+// 범위:
+//   - User: 본인인증·핀치스코어 구성요소 확장 (Slice 3 NICE/다날 연동 전제 필드 미리 마련)
+//   - Match: check-in/out 시각, GPS 인증, 정산 스냅샷(3.3% 원천세)
+//   - Wallet / Transaction: append-only ledger 패턴
+//   - Review: 양방향 평가
 // =====================================================
 
 generator client {
@@ -20,6 +22,13 @@ enum UserRole {
   WORKER
   CLIENT
   ADMIN
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
 }
 
 enum JobStatus {
@@ -41,22 +50,59 @@ enum MatchStatus {
   CANCELLED
 }
 
+enum TransactionType {
+  EARNING       // 업무 완료 적립 (세전)
+  WITHHOLDING   // 3.3% 원천세 차감 (음수 netAmount)
+  WITHDRAWAL    // 본인 계좌 출금
+  REFUND
+  ADJUSTMENT
+  PENALTY
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
 model User {
-  id            BigInt    @id @default(autoincrement())
-  phone         String    @unique @db.VarChar(20)
-  name          String    @db.VarChar(50)
-  role          UserRole
-  isVerified    Boolean   @default(false) @map("is_verified")
-  pinchScore    Int       @default(1000) @map("pinch_score")
+  id                 BigInt              @id @default(autoincrement())
+  phone              String              @unique @db.VarChar(20)
+  email              String?             @unique @db.VarChar(255)
+  name               String              @db.VarChar(50)
+  profileImg         String?             @map("profile_img")
+  role               UserRole
 
-  jobsCreated   Job[]     @relation("ClientJobs")
-  matches       Match[]   @relation("WorkerMatches")
+  // ── 본인인증 (Slice 3 에서 NICE/다날 응답 채움) ──
+  isVerified         Boolean             @default(false) @map("is_verified")
+  verificationStatus VerificationStatus  @default(UNVERIFIED) @map("verification_status")
+  ciHash             String?             @unique @map("ci_hash") @db.Char(88)
+  diHash             String?             @map("di_hash") @db.Char(88)
+  verifiedAt         DateTime?           @map("verified_at") @db.Timestamptz(6)
 
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+  // ── 핀치 스코어 구성 요소 ──
+  pinchScore         Int                 @default(1000) @map("pinch_score")
+  ratingAvg          Decimal             @default(0) @db.Decimal(3, 2) @map("rating_avg")
+  totalReviews       Int                 @default(0) @map("total_reviews")
+  completedCount     Int                 @default(0) @map("completed_count")
+  noshowCount        Int                 @default(0) @map("noshow_count")
+  lateCount          Int                 @default(0) @map("late_count")
+  cancelCount        Int                 @default(0) @map("cancel_count")
+
+  // ── 관계 ──
+  jobsCreated        Job[]               @relation("ClientJobs")
+  matches            Match[]             @relation("WorkerMatches")
+  wallet             Wallet?
+  reviewsWritten     Review[]            @relation("ReviewWriter")
+  reviewsReceived    Review[]            @relation("ReviewTarget")
+
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt          DateTime?           @map("deleted_at") @db.Timestamptz(6)
 
   @@index([role, deletedAt])
+  @@index([pinchScore(sort: Desc)])
   @@map("users")
 }
 
@@ -103,24 +149,127 @@ model Job {
 }
 
 model Match {
-  id           BigInt       @id @default(autoincrement())
-  jobId        BigInt       @map("job_id")
-  workerId     BigInt       @map("worker_id")
+  id              BigInt        @id @default(autoincrement())
+  jobId           BigInt        @map("job_id")
+  workerId        BigInt        @map("worker_id")
 
-  status       MatchStatus  @default(PENDING)
+  status          MatchStatus   @default(PENDING)
 
-  appliedAt    DateTime     @default(now()) @map("applied_at") @db.Timestamptz(6)
-  matchedAt    DateTime?    @map("matched_at") @db.Timestamptz(6)
+  // ── 라이프사이클 ──
+  appliedAt       DateTime      @default(now()) @map("applied_at") @db.Timestamptz(6)
+  matchedAt       DateTime?     @map("matched_at") @db.Timestamptz(6)
+  checkInAt       DateTime?     @map("check_in_at") @db.Timestamptz(6)
+  checkOutAt      DateTime?     @map("check_out_at") @db.Timestamptz(6)
+  completedAt     DateTime?     @map("completed_at") @db.Timestamptz(6)
+  cancelledAt     DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+  cancelReason    String?       @map("cancel_reason") @db.VarChar(255)
 
-  job          Job          @relation(fields: [jobId], references: [id])
-  worker       User         @relation("WorkerMatches", fields: [workerId], references: [id])
+  // ── GPS 인증 (audit) ──
+  checkInLat      Decimal?      @db.Decimal(10, 7) @map("check_in_lat")
+  checkInLng      Decimal?      @db.Decimal(10, 7) @map("check_in_lng")
+  checkInDistance Int?          @map("check_in_distance_m")
+  qrToken         String?       @map("qr_token") @db.VarChar(64)
 
-  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt    DateTime?    @map("deleted_at") @db.Timestamptz(6)
+  // ── 정산 스냅샷 (3.3% 원천세) ──
+  workedMinutes   Int?          @map("worked_minutes")
+  grossAmount     Int?          @map("gross_amount")
+  withholdingTax  Int?          @map("withholding_tax")
+  netAmount       Int?          @map("net_amount")
+
+  job             Job           @relation(fields: [jobId], references: [id])
+  worker          User          @relation("WorkerMatches", fields: [workerId], references: [id])
+  transactions    Transaction[]
+  reviews         Review[]
+
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime?     @map("deleted_at") @db.Timestamptz(6)
 
   @@unique([jobId, workerId])
   @@index([workerId, status])
   @@index([jobId, status])
   @@map("matches")
+}
+
+model Wallet {
+  id              BigInt        @id @default(autoincrement())
+  userId          BigInt        @unique @map("user_id")
+
+  // 모든 금액은 원 단위 정수
+  balance         Int           @default(0)                          // 출금 가능 잔액
+  pendingAmount   Int           @default(0) @map("pending_amount")   // 정산 대기액
+  totalEarned     Int           @default(0) @map("total_earned")     // 누적 세전 수입
+  totalWithheld   Int           @default(0) @map("total_withheld")   // 누적 원천세
+  totalWithdrawn  Int           @default(0) @map("total_withdrawn")  // 누적 출금
+
+  // Slice 3 에서 PortOne 실명 확인 후 채움 (pgcrypto 암호화 권장)
+  bankCode        String?       @map("bank_code") @db.VarChar(10)
+  bankAccountEnc  String?       @map("bank_account_enc") @db.Text
+
+  user            User          @relation(fields: [userId], references: [id])
+  transactions    Transaction[]
+
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime?     @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("wallets")
+}
+
+model Transaction {
+  id              BigInt              @id @default(autoincrement())
+  walletId        BigInt              @map("wallet_id")
+  matchId         BigInt?             @map("match_id")
+
+  type            TransactionType
+  status          TransactionStatus   @default(PENDING)
+
+  grossAmount     Int                 @map("gross_amount")
+  withholdingTax  Int                 @default(0) @map("withholding_tax")
+  netAmount       Int                 @map("net_amount")
+
+  // Append-only ledger audit
+  balanceBefore   Int                 @map("balance_before")
+  balanceAfter    Int                 @map("balance_after")
+
+  description     String?             @db.VarChar(255)
+  externalRef     String?             @map("external_ref") @db.VarChar(100) // PG 거래번호
+  idempotencyKey  String?             @unique @map("idempotency_key") @db.VarChar(100)
+
+  processedAt     DateTime?           @map("processed_at") @db.Timestamptz(6)
+
+  wallet          Wallet              @relation(fields: [walletId], references: [id])
+  match           Match?              @relation(fields: [matchId], references: [id])
+
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime?           @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([walletId, createdAt(sort: Desc)])
+  @@index([type, status])
+  @@index([matchId])
+  @@index([externalRef])
+  @@map("transactions")
+}
+
+model Review {
+  id         BigInt    @id @default(autoincrement())
+  matchId    BigInt    @map("match_id")
+  writerId   BigInt    @map("writer_id")
+  targetId   BigInt    @map("target_id")
+
+  score      Int       // 1~5 (CHECK 제약: post-init.sql)
+  comment    String?   @db.Text
+
+  match      Match     @relation(fields: [matchId], references: [id])
+  writer     User      @relation("ReviewWriter", fields: [writerId], references: [id])
+  target     User      @relation("ReviewTarget", fields: [targetId], references: [id])
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@unique([matchId, writerId])
+  @@index([targetId, deletedAt])
+  @@map("reviews")
 }
