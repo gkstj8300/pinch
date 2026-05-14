@@ -1,23 +1,49 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { env } from '@/shared/config/env';
 
 const ACCESS_TOKEN_KEY = 'pinch.accessToken';
 
 /**
- * SecureStore 접근자 — JWT 보관/회수.
- * 다음 브랜치(로그인 화면)에서 setAccessToken 호출.
+ * JWT 토큰 저장소 — 플랫폼별 분기.
+ *   - native(iOS/Android): expo-secure-store (Keychain / EncryptedSharedPreferences)
+ *   - web: localStorage (SecureStore 가 web 미완전 지원 — 계획서 §11 R3)
+ *
+ * web 의 localStorage 는 XSS 노출 가능 — dev 단계 한정.
+ * production 에서는 HttpOnly cookie 또는 별도 web 토큰 전략 검토.
  */
-export async function getAccessToken(): Promise<string | null> {
+async function readToken(): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    if (typeof globalThis.localStorage === 'undefined') return null;
+    return globalThis.localStorage.getItem(ACCESS_TOKEN_KEY);
+  }
   return SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
 }
 
-export async function setAccessToken(token: string | null): Promise<void> {
+async function writeToken(token: string | null): Promise<void> {
+  if (Platform.OS === 'web') {
+    if (typeof globalThis.localStorage === 'undefined') return;
+    if (token === null) {
+      globalThis.localStorage.removeItem(ACCESS_TOKEN_KEY);
+    } else {
+      globalThis.localStorage.setItem(ACCESS_TOKEN_KEY, token);
+    }
+    return;
+  }
   if (token === null) {
     await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
   } else {
     await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, token);
   }
+}
+
+export async function getAccessToken(): Promise<string | null> {
+  return readToken();
+}
+
+export async function setAccessToken(token: string | null): Promise<void> {
+  return writeToken(token);
 }
 
 /**
@@ -34,7 +60,7 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   const token = await getAccessToken();
-  if (token) {
+  if (token !== null) {
     config.headers.set('Authorization', `Bearer ${token}`);
   }
   return config;

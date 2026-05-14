@@ -12,6 +12,10 @@ module.exports = {
     './src/**/*.{ts,tsx}',
   ],
   presets: [require('nativewind/preset')],
+  // NativeWind 4 + web 어댑터(expo-router) 는 'class' dark mode 를 요구.
+  // 기본 'media' 시 "Cannot manually set color scheme" 런타임 에러.
+  // 현재는 light only 사용 — class 모드 명시만으로 충분.
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
