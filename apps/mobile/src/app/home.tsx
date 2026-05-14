@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
-import { Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/shared/ui';
 import { queryKeys } from '@/shared/api';
+import { brandAssets } from '@/shared/assets';
 import { clearSession, useAuthStore } from '@/entities/user';
 
 /**
@@ -35,7 +36,12 @@ export default function HomeScreen() {
     <SafeAreaView className="flex-1 bg-background-primary">
       <View className="flex-1 gap-6 px-6 pt-6">
         <View>
-          <Text className="text-identity text-3xl font-pretendard-bold">PINCH</Text>
+          <Image
+            source={brandAssets.logo}
+            className="h-10 w-32"
+            resizeMode="contain"
+            accessibilityLabel="PINCH"
+          />
           <Text className="text-text-tertiary mt-1 text-sm">
             로그인 완료 — 다음 단계 화면들은 후속 PR
           </Text>
