@@ -38,7 +38,8 @@ export default function HomeScreen() {
         <View>
           <Image
             source={brandAssets.logo}
-            className="h-logo-sm w-logo-sm"
+            // tailwind.config.js 의 logo-sm 토큰과 동기화 (80×28 px)
+            style={{ width: 80, height: 28 }}
             resizeMode="contain"
             accessibilityLabel="PINCH"
           />
