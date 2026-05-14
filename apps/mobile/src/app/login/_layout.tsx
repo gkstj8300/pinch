@@ -12,7 +12,7 @@ export default function LoginLayout() {
         headerTitleStyle: { fontFamily: 'Pretendard-SemiBold' },
       }}
     >
-      <Stack.Screen name="index" options={{ headerTitle: '', headerBackVisible: false }} />
+      <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="email" options={{ headerTitle: '이메일로 로그인' }} />
     </Stack>
   );
