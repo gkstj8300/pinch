@@ -24,7 +24,7 @@ export default function LoginIndexScreen() {
         <View className="mt-16 items-center">
           <Image
             source={brandAssets.logo}
-            className="h-10 w-28"
+            className="h-logo-md w-logo-md"
             resizeMode="contain"
             accessibilityLabel="PINCH"
           />
