@@ -1,34 +1,54 @@
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, View } from 'react-native';
+import { router } from 'expo-router';
 import { colors } from '@pinch/ui-tokens';
+import { getAccessToken, useAuthStore, useMeQuery } from '@/entities/user';
 
 /**
- * 베이스라인 placeholder 화면.
- * 다음 브랜치(E.2)에서 로그인 화면으로 교체됨.
+ * Splash / Redirect (계획서 §3.2.1).
  *
- * 검증 포인트:
- *   - NativeWind 클래스 (bg-background-primary, text-text-* 등) 정상 적용
- *   - @pinch/ui-tokens 워크스페이스 패키지 import 동작
- *   - SafeAreaView · GestureHandlerRootView · QueryProvider 래핑 정상
+ * 흐름:
+ *   1) SecureStore 토큰 확인 → hasToken state 설정
+ *   2-a) 토큰 없음 → /login replace
+ *   2-b) 토큰 있음 → useMeQuery 발화
+ *        ├─ success → useAuthStore.setUser + /home replace
+ *        └─ error(401 / 네트워크) → apiClient interceptor 가 토큰 자동 무효화
+ *                                  → /login replace
  */
-export default function HomeScreen() {
-  return (
-    <SafeAreaView className="flex-1 bg-background-primary">
-      <View className="flex-1 items-center justify-center px-6">
-        <Text className="text-identity text-5xl font-bold">PINCH</Text>
-        <Text className="text-text-tertiary mt-3 text-center">
-          필요한 순간, 한 꼬집의 시간을 채우다
-        </Text>
+export default function SplashScreen() {
+  const [hasToken, setHasToken] = useState<boolean | null>(null);
+  const setUser = useAuthStore((s) => s.setUser);
 
-        <View className="mt-12 w-full rounded-2xl bg-background-secondary p-4">
-          <Text className="text-text-secondary text-sm">
-            디자인 시스템 v0 baseline
-          </Text>
-          <Text className="text-text-identity-strong mt-1 text-base font-semibold">
-            identity color = {colors.identity}
-          </Text>
-        </View>
-      </View>
-    </SafeAreaView>
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const token = await getAccessToken();
+      if (!cancelled) setHasToken(token !== null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const meQuery = useMeQuery({ enabled: hasToken === true });
+
+  useEffect(() => {
+    if (hasToken === null) return;
+    if (hasToken === false) {
+      router.replace('/login');
+      return;
+    }
+    if (meQuery.isSuccess) {
+      setUser(meQuery.data);
+      router.replace('/home');
+    } else if (meQuery.isError) {
+      router.replace('/login');
+    }
+  }, [hasToken, meQuery.isSuccess, meQuery.isError, meQuery.data, setUser]);
+
+  return (
+    <View className="flex-1 items-center justify-center bg-background-primary">
+      <ActivityIndicator size="large" color={colors.identity} />
+    </View>
   );
 }
