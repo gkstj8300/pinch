@@ -52,7 +52,7 @@ export function TextInput({
   return (
     <View className="w-full">
       {label !== undefined && (
-        <Text className="text-text-secondary mb-2 text-sm font-medium">
+        <Text className="text-text-secondary mb-2 text-sm font-pretendard-medium">
           {label}
         </Text>
       )}

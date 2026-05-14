@@ -35,7 +35,7 @@ export default function HomeScreen() {
     <SafeAreaView className="flex-1 bg-background-primary">
       <View className="flex-1 gap-6 px-6 pt-6">
         <View>
-          <Text className="text-identity text-3xl font-bold">PINCH</Text>
+          <Text className="text-identity text-3xl font-pretendard-bold">PINCH</Text>
           <Text className="text-text-tertiary mt-1 text-sm">
             로그인 완료 — 다음 단계 화면들은 후속 PR
           </Text>
@@ -43,7 +43,7 @@ export default function HomeScreen() {
 
         <View className="gap-1 rounded-2xl bg-background-secondary p-4">
           <Text className="text-text-secondary text-xs">계정</Text>
-          <Text className="text-text-primary text-base font-semibold">{user.name}</Text>
+          <Text className="text-text-primary text-base font-pretendard-semibold">{user.name}</Text>
           <Text className="text-text-tertiary text-xs">{user.email}</Text>
           <Text className="text-text-quaternary text-xs">{user.role}</Text>
         </View>
