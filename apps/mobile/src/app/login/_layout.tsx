@@ -9,6 +9,7 @@ export default function LoginLayout() {
         headerBackTitle: '',
         headerTintColor: colors.text.primary,
         headerStyle: { backgroundColor: colors.background.primary },
+        headerTitleStyle: { fontFamily: 'Pretendard-SemiBold' },
       }}
     >
       <Stack.Screen name="index" options={{ headerTitle: '', headerBackVisible: false }} />
