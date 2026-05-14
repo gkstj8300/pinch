@@ -1,7 +1,8 @@
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Alert, Image, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, router } from 'expo-router';
 import { KakaoLoginButton } from '@/features/kakao-oauth';
+import { brandAssets } from '@/shared/assets';
 
 /**
  * 메인 로그인 (계획서 §3.2.2).
@@ -21,7 +22,12 @@ export default function LoginIndexScreen() {
     <SafeAreaView className="flex-1 bg-background-primary" edges={['bottom']}>
       <View className="flex-1 gap-6 px-6">
         <View className="mt-16 items-center">
-          <Text className="text-identity text-4xl font-pretendard-bold">PINCH</Text>
+          <Image
+            source={brandAssets.logo}
+            className="h-14 w-40"
+            resizeMode="contain"
+            accessibilityLabel="PINCH"
+          />
           <Text className="text-text-tertiary mt-2 text-sm">
             필요한 순간, 한 꼬집의 시간을 채우다
           </Text>
