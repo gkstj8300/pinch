@@ -1,2 +1,3 @@
-export { useAuthStore, type AuthUser } from './model/store';
-export type { UserRole } from './model/types';
+export { useAuthStore, clearSession } from './model/store';
+export type { AuthUser, UserRole } from './model/types';
+export { useMeQuery, getAccessToken, setAccessToken } from './api';
