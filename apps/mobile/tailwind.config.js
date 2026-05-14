@@ -80,6 +80,18 @@ module.exports = {
       letterSpacing: {
         pinch: '-0.5px',
       },
+      // PINCH 로고 전용 사이즈 토큰 — logo.png 종횡비 약 2.8:1 보존
+      // (높이 × 너비) sm 28×80 / md 40×112 / lg 56×156
+      height: {
+        'logo-sm': '28px',
+        'logo-md': '40px',
+        'logo-lg': '56px',
+      },
+      width: {
+        'logo-sm': '80px',
+        'logo-md': '112px',
+        'logo-lg': '156px',
+      },
     },
   },
   plugins: [],
