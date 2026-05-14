@@ -36,7 +36,7 @@ export function Checkbox({
         className={`h-5 w-5 items-center justify-center rounded border-2 ${boxClass}`}
       >
         {checked && (
-          <Text className="text-text-primary-inverse text-xs font-bold">✓</Text>
+          <Text className="text-text-primary-inverse text-xs font-pretendard-bold">✓</Text>
         )}
       </View>
       <Text

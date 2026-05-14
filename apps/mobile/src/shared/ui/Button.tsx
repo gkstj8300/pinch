@@ -57,7 +57,7 @@ export function Button({
         <ActivityIndicator color={colors.text.primaryInverse} />
       ) : (
         <Text
-          className={`text-base font-semibold ${textClass}`}
+          className={`text-base font-pretendard-semibold ${textClass}`}
           style={isKakao ? { color: KAKAO_FG } : undefined}
         >
           {label}

@@ -21,14 +21,14 @@ export default function LoginIndexScreen() {
     <SafeAreaView className="flex-1 bg-background-primary" edges={['bottom']}>
       <View className="flex-1 gap-6 px-6">
         <View className="mt-16 items-center">
-          <Text className="text-identity text-4xl font-bold">PINCH</Text>
+          <Text className="text-identity text-4xl font-pretendard-bold">PINCH</Text>
           <Text className="text-text-tertiary mt-2 text-sm">
             필요한 순간, 한 꼬집의 시간을 채우다
           </Text>
         </View>
 
         <View className="bg-identity-sub mt-8 self-center rounded-full px-4 py-2">
-          <Text className="text-text-identity-strong text-sm font-semibold">
+          <Text className="text-text-identity-strong text-sm font-pretendard-semibold">
             🎉 3초만에 빠른 회원가입
           </Text>
         </View>
@@ -41,7 +41,7 @@ export default function LoginIndexScreen() {
             accessibilityRole="button"
             className="h-12 items-center justify-center rounded-xl bg-gray-90"
           >
-            <Text className="text-text-primary-inverse text-base font-semibold">
+            <Text className="text-text-primary-inverse text-base font-pretendard-semibold">
               Apple로 계속하기
             </Text>
           </Pressable>
@@ -54,7 +54,7 @@ export default function LoginIndexScreen() {
               className="h-12 w-12 items-center justify-center rounded-full"
               style={{ backgroundColor: '#03C75A' }}
             >
-              <Text className="text-text-primary-inverse text-base font-bold">N</Text>
+              <Text className="text-text-primary-inverse text-base font-pretendard-bold">N</Text>
             </Pressable>
             <Pressable
               onPress={() => notImpl('페이스북')}
@@ -63,7 +63,7 @@ export default function LoginIndexScreen() {
               className="h-12 w-12 items-center justify-center rounded-full"
               style={{ backgroundColor: '#1877F2' }}
             >
-              <Text className="text-text-primary-inverse text-base font-bold">f</Text>
+              <Text className="text-text-primary-inverse text-base font-pretendard-bold">f</Text>
             </Pressable>
           </View>
         </View>
