@@ -24,7 +24,8 @@ export default function LoginIndexScreen() {
         <View className="mt-16 items-center">
           <Image
             source={brandAssets.logo}
-            className="h-logo-md w-logo-md"
+            // tailwind.config.js 의 logo-md 토큰과 동기화 (112×40 px)
+            style={{ width: 112, height: 40 }}
             resizeMode="contain"
             accessibilityLabel="PINCH"
           />
