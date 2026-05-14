@@ -38,7 +38,7 @@ export default function HomeScreen() {
         <View>
           <Image
             source={brandAssets.logo}
-            className="h-10 w-32"
+            className="h-7 w-20"
             resizeMode="contain"
             accessibilityLabel="PINCH"
           />
