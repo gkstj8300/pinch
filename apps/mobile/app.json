@@ -4,7 +4,7 @@
     "slug": "pinch-mobile",
     "version": "0.1.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/web-app-manifest-512x512.png",
     "scheme": "pinch",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -15,13 +15,14 @@
     "android": {
       "package": "kr.pinch.mobile",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/web-app-manifest-512x512.png",
         "backgroundColor": "#fdfdfd"
       }
     },
     "web": {
       "bundler": "metro",
-      "output": "single"
+      "output": "single",
+      "favicon": "./assets/favicon-96x96.png"
     },
     "plugins": ["expo-router", "expo-secure-store"],
     "experiments": {
