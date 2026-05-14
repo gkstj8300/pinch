@@ -68,7 +68,14 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ['Pretendard'],
+        // 기본 sans — Pretendard Regular. fontWeight 클래스 (font-bold 등)
+        // 는 OS 가 Pretendard family 내에서 weight 매칭 시도.
+        // 완벽한 weight 분기가 필요한 경우 아래 별도 클래스 사용.
+        sans: ['Pretendard-Regular'],
+        'pretendard': ['Pretendard-Regular'],
+        'pretendard-medium': ['Pretendard-Medium'],
+        'pretendard-semibold': ['Pretendard-SemiBold'],
+        'pretendard-bold': ['Pretendard-Bold'],
       },
       letterSpacing: {
         pinch: '-0.5px',
