@@ -19,13 +19,12 @@ export default function LoginIndexScreen() {
     Alert.alert('준비 중', `${name} 로그인은 곧 제공됩니다`);
 
   return (
-    <SafeAreaView className="flex-1 bg-background-primary" edges={['bottom']}>
+    <SafeAreaView className="flex-1 bg-background-primary" edges={['top', 'bottom']}>
       <View className="flex-1 gap-6 px-6">
         <View className="mt-16 items-center">
           <Image
             source={brandAssets.logo}
-            // tailwind.config.js 의 logo-md 토큰과 동기화 (112×40 px)
-            style={{ width: 112, height: 40 }}
+            style={{ width: 210, height: 65 }}
             resizeMode="contain"
             accessibilityLabel="PINCH"
           />
