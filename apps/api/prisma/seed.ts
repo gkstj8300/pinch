@@ -1,19 +1,24 @@
 /**
- * Slice 1 PoC 시드
- * - 사업주 1명
- * - 워커 200명 (모두 인증 + score=1000)
- * - 모집 1명짜리 공고 1개 (서울시청 좌표)
+ * Slice 2 시드 — email/password_hash 기반 (Phase A 재작성)
+ * - 사업주 1명 (client@pinch.local)
+ * - 워커 200명 (worker001@pinch.local ~ worker200@pinch.local)
+ * - 모든 사용자 동일 비밀번호 (개발 단순성): pinch1234!
+ * - 모집 1명 공고 + 위치 다양화 공고 6개
  *
- * k6 시나리오에서 200명이 동시 지원 → 정확히 1명만 MATCHED 검증
+ * k6 시나리오는 별도 작업(F-01)에서 email 기반으로 갱신 예정.
  */
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
+
+const SEED_PASSWORD = 'pinch1234!';
+const BCRYPT_ROUNDS = 10;
 
 async function main() {
   console.log('🌱 시드 시작');
 
-  // 모든 데이터 초기화 (PoC 단계) — FK 의존성 역순으로 삭제
+  // 모든 데이터 초기화 — FK 역순
   await prisma.review.deleteMany();
   await prisma.transaction.deleteMany();
   await prisma.wallet.deleteMany();
@@ -21,27 +26,40 @@ async function main() {
   await prisma.job.deleteMany();
   await prisma.user.deleteMany();
 
+  // 동일 비밀번호 → bcrypt 1회 계산 후 모든 사용자가 같은 해시 공유
+  const passwordHash = await bcrypt.hash(SEED_PASSWORD, BCRYPT_ROUNDS);
+  console.log(`✓ bcrypt 해시 생성 (rounds=${BCRYPT_ROUNDS})`);
+
   // 사업주
   const client = await prisma.user.create({
     data: {
-      phone: '01000000000',
-      name: '핀치 카페',
+      email: 'client@pinch.local',
+      passwordHash,
+      name: '핀치카페',
       role: 'CLIENT',
       isVerified: true,
+      termsAgreedAt: new Date(),
     },
   });
-  console.log(`✓ 사업주 생성: id=${client.id}`);
+  console.log(`✓ 사업주 생성: id=${client.id} (${client.email} / ${SEED_PASSWORD})`);
 
   // 워커 200명
-  const workerData = Array.from({ length: 200 }, (_, i) => ({
-    phone: `0101000${String(i).padStart(4, '0')}`,
-    name: `워커${i + 1}`,
-    role: 'WORKER' as const,
-    isVerified: true,
-    pinchScore: 1000,
-  }));
+  const workerData = Array.from({ length: 200 }, (_, i) => {
+    const seq = String(i + 1).padStart(3, '0');
+    return {
+      email: `worker${seq}@pinch.local`,
+      passwordHash,
+      name: `워커${seq}`,
+      role: 'WORKER' as const,
+      isVerified: true,
+      pinchScore: 1000,
+      termsAgreedAt: new Date(),
+    };
+  });
   const workers = await prisma.user.createManyAndReturn({ data: workerData });
-  console.log(`✓ 워커 ${workers.length}명 생성 (id=${workers[0].id}~${workers[workers.length - 1].id})`);
+  console.log(
+    `✓ 워커 ${workers.length}명 생성 (id=${workers[0].id}~${workers[workers.length - 1].id})`,
+  );
 
   // 1명 모집 공고 (서울시청) — k6 동시성 테스트 대상
   const stressJob = await prisma.job.create({
@@ -65,14 +83,14 @@ async function main() {
   });
   console.log(`✓ 공고 생성: id=${stressJob.id} (모집 1명, 서울시청 — k6 대상)`);
 
-  // 위치 다양화 공고 (search 테스트용) — 모집 인원 여유 있음
+  // 위치 다양화 공고 (search 테스트용)
   const searchJobs = [
-    { title: '강남역 편의점 야간', category: 'RETAIL',  address: '서울특별시 강남구 강남대로 396', lat: 37.4979, lng: 127.0276, wage: 11_000, minutes: 240 },
-    { title: '홍대 클럽 입구 보안', category: 'EVENT',   address: '서울특별시 마포구 양화로 160', lat: 37.5572, lng: 126.9249, wage: 15_000, minutes: 360 },
-    { title: '잠실 행사 도우미',    category: 'EVENT',   address: '서울특별시 송파구 올림픽로 240', lat: 37.5133, lng: 127.1000, wage: 13_000, minutes: 300 },
-    { title: '명동 카페 주말 알바', category: 'F&B',     address: '서울특별시 중구 명동길 26',     lat: 37.5636, lng: 126.9869, wage: 12_500, minutes: 480 },
-    { title: '여의도 행사 진행',    category: 'EVENT',   address: '서울특별시 영등포구 여의대로 70', lat: 37.5219, lng: 126.9245, wage: 16_000, minutes: 240 },
-    { title: '부산역 짐 운반',      category: 'LOGISTICS', address: '부산광역시 동구 중앙대로 206', lat: 35.1156, lng: 129.0419, wage: 13_500, minutes: 120 },
+    { title: '강남역 편의점 야간',   category: 'RETAIL',    address: '서울특별시 강남구 강남대로 396', lat: 37.4979, lng: 127.0276, wage: 11_000, minutes: 240 },
+    { title: '홍대 클럽 입구 보안',  category: 'EVENT',     address: '서울특별시 마포구 양화로 160',   lat: 37.5572, lng: 126.9249, wage: 15_000, minutes: 360 },
+    { title: '잠실 행사 도우미',     category: 'EVENT',     address: '서울특별시 송파구 올림픽로 240', lat: 37.5133, lng: 127.1000, wage: 13_000, minutes: 300 },
+    { title: '명동 카페 주말 알바',  category: 'F&B',       address: '서울특별시 중구 명동길 26',      lat: 37.5636, lng: 126.9869, wage: 12_500, minutes: 480 },
+    { title: '여의도 행사 진행',     category: 'EVENT',     address: '서울특별시 영등포구 여의대로 70', lat: 37.5219, lng: 126.9245, wage: 16_000, minutes: 240 },
+    { title: '부산역 짐 운반',       category: 'LOGISTICS', address: '부산광역시 동구 중앙대로 206',   lat: 35.1156, lng: 129.0419, wage: 13_500, minutes: 120 },
   ];
   for (const j of searchJobs) {
     await prisma.job.create({
@@ -84,7 +102,7 @@ async function main() {
         address: j.address,
         latitude: j.lat,
         longitude: j.lng,
-        startAt: new Date(Date.now() + 2 * 60 * 60 * 1000),  // 2h 후
+        startAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
         endAt: new Date(Date.now() + 2 * 60 * 60 * 1000 + j.minutes * 60_000),
         hourlyWage: j.wage,
         estimatedMinutes: j.minutes,
@@ -97,7 +115,10 @@ async function main() {
   }
   console.log(`✓ 추가 공고 ${searchJobs.length}개 (search 테스트용 — 서울 5 + 부산 1)`);
 
-  console.log('\n📋 k6 환경변수:');
+  console.log('\n📋 로그인 정보:');
+  console.log(`  사업주: client@pinch.local / ${SEED_PASSWORD}`);
+  console.log(`  워커:   worker001@pinch.local ~ worker200@pinch.local / ${SEED_PASSWORD}`);
+  console.log('\n📋 k6 환경변수 (Phase F-01 에서 email 기반으로 갱신 예정):');
   console.log(`  JOB_ID=${stressJob.id}`);
   console.log(`  WORKER_ID_START=${workers[0].id}`);
   console.log(`  WORKER_ID_END=${workers[workers.length - 1].id}`);

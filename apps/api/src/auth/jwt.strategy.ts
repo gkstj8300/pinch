@@ -28,7 +28,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const id = BigInt(payload.sub);
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true, phone: true, role: true },
+      select: { id: true, email: true, role: true },
     });
     if (!user) throw new UnauthorizedException('USER_NOT_FOUND_OR_DELETED');
     return user;

@@ -9,10 +9,13 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    './app/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
   ],
   presets: [require('nativewind/preset')],
+  // NativeWind 4 + web 어댑터(expo-router) 는 'class' dark mode 를 요구.
+  // 기본 'media' 시 "Cannot manually set color scheme" 런타임 에러.
+  // 현재는 light only 사용 — class 모드 명시만으로 충분.
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
@@ -65,10 +68,29 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ['Pretendard'],
+        // 기본 sans — Pretendard Regular. fontWeight 클래스 (font-bold 등)
+        // 는 OS 가 Pretendard family 내에서 weight 매칭 시도.
+        // 완벽한 weight 분기가 필요한 경우 아래 별도 클래스 사용.
+        sans: ['Pretendard-Regular'],
+        'pretendard': ['Pretendard-Regular'],
+        'pretendard-medium': ['Pretendard-Medium'],
+        'pretendard-semibold': ['Pretendard-SemiBold'],
+        'pretendard-bold': ['Pretendard-Bold'],
       },
       letterSpacing: {
         pinch: '-0.5px',
+      },
+      // PINCH 로고 전용 사이즈 토큰 — logo.png 종횡비 약 2.8:1 보존
+      // (높이 × 너비) sm 28×80 / md 40×112 / lg 56×156
+      height: {
+        'logo-sm': '28px',
+        'logo-md': '40px',
+        'logo-lg': '56px',
+      },
+      width: {
+        'logo-sm': '80px',
+        'logo-md': '112px',
+        'logo-lg': '156px',
       },
     },
   },
