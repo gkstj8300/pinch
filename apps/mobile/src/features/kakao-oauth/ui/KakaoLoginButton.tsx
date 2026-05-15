@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useAuthRequest } from 'expo-auth-session';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { SocialLoginButton } from '@/shared/ui';
 import { env } from '@/shared/config/env';
 import { useKakaoOAuthMutation } from '../api/useKakaoOAuthMutation';
@@ -10,6 +11,17 @@ import {
   buildKakaoAuthRequestConfig,
   getKakaoRedirectUri,
 } from '../lib/buildAuthRequest';
+
+/**
+ * Expo Go 환경 여부 — Expo SDK 53+ 부터 auth.expo.io OAuth proxy 가
+ * deprecated 되어 Expo Go 에서 `exp://<dev>:<port>/--/oauth/kakao` 같은
+ * 동적 URI 가 발급됨. 카카오 콘솔은 http(s):// 만 등록 허용 → KOE006.
+ *
+ * 따라서 Expo Go 에서는 OAuth 흐름 진입 직전 "준비 중" Alert 로 종료.
+ * EAS Dev Build / Standalone 빌드에서는 pinch://oauth/kakao 정상 동작.
+ */
+const IS_EXPO_GO =
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 // Android Custom Tab / iOS SFSafariViewController 사전 워밍업 — 모듈
 // 최상위에서 한 번만 호출되어야 한다 (Expo 권장 패턴).
@@ -51,6 +63,13 @@ export function KakaoLoginButton({ onSuccess }: KakaoLoginButtonProps) {
   }, [response, mutation, onSuccess]);
 
   const handlePress = async () => {
+    if (IS_EXPO_GO) {
+      Alert.alert(
+        '준비 중',
+        '카카오 로그인은 정식 빌드 환경에서 제공됩니다.\n(Expo Go 는 카카오 OAuth 미지원)',
+      );
+      return;
+    }
     if (restApiKey.length === 0) {
       Alert.alert(
         '카카오 로그인 미설정',
