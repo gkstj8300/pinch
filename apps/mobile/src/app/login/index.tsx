@@ -1,15 +1,20 @@
-import { Alert, Image, Pressable, Text, View } from 'react-native';
+import { Alert, Image, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, router } from 'expo-router';
 import { KakaoLoginButton } from '@/features/kakao-oauth';
+import { SocialLoginButton } from '@/shared/ui';
 import { brandAssets } from '@/shared/assets';
 
 /**
- * 메인 로그인 (계획서 §3.2.2).
- *   - 1순위 CTA: 카카오톡 (실동작, KakaoLoginButton)
- *   - 2순위: Apple — disabled, 클릭 시 "준비 중" Alert
- *   - 보조 소셜: 네이버 / 페이스북 (원형 배지) — 동일
- *   - 텍스트 링크: 이메일 로그인 / 회원가입
+ * 메인 로그인 화면.
+ *
+ * Layout:
+ *   상단 spacer (flex-1) — 로고 그룹을 화면 중앙쯤에 띄움
+ *   로고 + 식별 텍스트 (vertical center 영역)
+ *   하단 spacer (flex-1)
+ *   강조 말풍선
+ *   소셜 로그인 3종 (카카오 실동작 / 네이버·구글 placeholder)
+ *   하단 링크 (이메일 로그인 / 회원가입 / 로그인 문제)
  */
 export default function LoginIndexScreen() {
   const handleLoginSuccess = () => {
@@ -20,59 +25,37 @@ export default function LoginIndexScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background-primary" edges={['top', 'bottom']}>
-      <View className="flex-1 gap-6 px-6">
-        <View className="mt-16 items-center">
-          <Image
-            source={brandAssets.logo}
-            style={{ width: 210, height: 65 }}
-            resizeMode="contain"
-            accessibilityLabel="PINCH"
-          />
-          <Text className="text-text-tertiary mt-2 text-sm">
-            필요한 순간, 한 꼬집의 시간을 채우다
-          </Text>
-        </View>
-
-        <View className="bg-identity-sub mt-8 self-center rounded-full px-4 py-2">
-          <Text className="text-text-identity-strong text-sm font-pretendard-semibold">
-            🎉 3초만에 빠른 회원가입
-          </Text>
-        </View>
-
-        <View className="gap-3">
-          <KakaoLoginButton onSuccess={handleLoginSuccess} />
-
-          <Pressable
-            onPress={() => notImpl('Apple')}
-            accessibilityRole="button"
-            className="h-12 items-center justify-center rounded-xl bg-gray-90"
-          >
-            <Text className="text-text-primary-inverse text-base font-pretendard-semibold">
-              Apple로 계속하기
+      <View className="flex-1 px-6">
+        {/* 로고 + 말풍선 + 소셜 버튼을 한 묶음으로 화면 중앙에 배치 */}
+        <View className="flex-1 justify-center gap-6">
+          <View className="items-center">
+            <Image
+              source={brandAssets.logo}
+              style={{ width: 210, height: 65 }}
+              resizeMode="contain"
+              accessibilityLabel="PINCH"
+            />
+            <Text className="text-text-tertiary mt-2 text-sm">
+              필요한 순간, 한 꼬집의 시간을 채우다
             </Text>
-          </Pressable>
+          </View>
 
-          <View className="mt-2 flex-row justify-center gap-4">
-            <Pressable
-              onPress={() => notImpl('네이버')}
-              accessibilityRole="button"
-              accessibilityLabel="네이버로 로그인"
-              className="h-12 w-12 items-center justify-center rounded-full"
-              style={{ backgroundColor: '#03C75A' }}
-            >
-              <Text className="text-text-primary-inverse text-base font-pretendard-bold">N</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => notImpl('페이스북')}
-              accessibilityRole="button"
-              accessibilityLabel="페이스북으로 로그인"
-              className="h-12 w-12 items-center justify-center rounded-full"
-              style={{ backgroundColor: '#1877F2' }}
-            >
-              <Text className="text-text-primary-inverse text-base font-pretendard-bold">f</Text>
-            </Pressable>
+          <View className="bg-identity-sub self-center rounded-full px-4 py-2">
+            <Text className="text-text-identity-strong text-sm font-pretendard-semibold">
+              🎉 3초만에 빠른 회원가입
+            </Text>
+          </View>
+
+          <View className="gap-3">
+            <KakaoLoginButton onSuccess={handleLoginSuccess} />
+            <SocialLoginButton provider="naver" onPress={() => notImpl('네이버')} />
+            <SocialLoginButton provider="google" onPress={() => notImpl('Google')} />
           </View>
         </View>
+
+        {/* 하단 텍스트 링크 — bottom 고정 */}
+        <View className="items-center gap-3 pb-2">
+   </View>
 
         <View className="mt-auto items-center gap-3 pb-8">
           <View className="flex-row items-center gap-3">

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useAuthRequest } from 'expo-auth-session';
-import { Button } from '@/shared/ui';
+import { SocialLoginButton } from '@/shared/ui';
 import { env } from '@/shared/config/env';
 import { useKakaoOAuthMutation } from '../api/useKakaoOAuthMutation';
 import {
@@ -65,14 +65,10 @@ export function KakaoLoginButton({ onSuccess }: KakaoLoginButtonProps) {
     }
   };
 
-  const disabled = restApiKey.length === 0;
-
   return (
-    <Button
-      label="카카오톡으로 계속하기"
-      variant="kakao"
+    <SocialLoginButton
+      provider="kakao"
       onPress={handlePress}
-      disabled={disabled}
       loading={mutation.isPending}
     />
   );
