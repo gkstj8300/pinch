@@ -110,6 +110,9 @@ importers:
       '@expo/metro-runtime':
         specifier: ~6.1.2
         version: 6.1.2(expo@54.0.34)(react-dom@19.1.0(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
+      '@pinch/brand-assets':
+        specifier: workspace:*
+        version: link:../../packages/brand-assets
       '@pinch/ui-tokens':
         specifier: workspace:*
         version: link:../../packages/ui-tokens
@@ -222,6 +225,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@pinch/brand-assets':
+        specifier: workspace:*
+        version: link:../../packages/brand-assets
       '@pinch/ui-tokens':
         specifier: workspace:*
         version: link:../../packages/ui-tokens
@@ -292,6 +298,8 @@ importers:
       vitest:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@22.19.19)(happy-dom@15.11.7)(jsdom@20.0.3)(lightningcss@1.32.0)(msw@2.14.6(@types/node@22.19.19)(typescript@5.9.3))(terser@5.47.1)
+
+  packages/brand-assets: {}
 
   packages/ui-tokens:
     devDependencies:

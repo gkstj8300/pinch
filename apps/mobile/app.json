@@ -4,7 +4,7 @@
     "slug": "pinch-mobile",
     "version": "0.1.0",
     "orientation": "portrait",
-    "icon": "./assets/web-app-manifest-512x512.png",
+    "icon": "../../packages/brand-assets/favicon/web-app-manifest-512x512.png",
     "scheme": "pinch",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -15,14 +15,14 @@
     "android": {
       "package": "kr.pinch.mobile",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/web-app-manifest-512x512.png",
+        "foregroundImage": "../../packages/brand-assets/favicon/web-app-manifest-512x512.png",
         "backgroundColor": "#fdfdfd"
       }
     },
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/favicon-96x96.png"
+      "favicon": "../../packages/brand-assets/favicon/favicon-96x96.png"
     },
     "plugins": [
       "expo-router",
@@ -30,7 +30,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/logo.png",
+          "image": "../../packages/brand-assets/logo/logo.png",
           "backgroundColor": "#FDFDFD",
           "imageWidth": 120
         }
