@@ -4,6 +4,7 @@ import { KakaoOAuthService } from './kakao-oauth.service';
 import { LoginDto } from './dto/login.dto';
 import { SignupDto } from './dto/signup.dto';
 import { KakaoOAuthDto } from './dto/kakao-oauth.dto';
+import { RefreshDto } from './dto/refresh.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
 import type { CurrentUserContext } from './types';
@@ -59,5 +60,25 @@ export class AuthController {
       email: user.email,
       role: user.role,
     };
+  }
+
+  /**
+   * Refresh token 회전 — 기존 refresh 를 새 (access, refresh) 한 쌍으로 교환.
+   * 이전 refresh 는 즉시 revoked. reuse 시 user 의 모든 세션 무효화.
+   */
+  @Post('refresh')
+  @HttpCode(200)
+  refresh(@Body() dto: RefreshDto) {
+    return this.auth.refresh(dto.refreshToken);
+  }
+
+  /**
+   * 로그아웃 — refresh token 1개 무효화. idempotent (검증 실패/미일치도 204).
+   * Access token 은 클라이언트가 폐기. (서버측 즉시 무효화는 추후 blacklist 도입 시)
+   */
+  @Post('logout')
+  @HttpCode(204)
+  async logout(@Body() dto: RefreshDto): Promise<void> {
+    await this.auth.logout(dto.refreshToken);
   }
 }

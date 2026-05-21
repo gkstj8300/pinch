@@ -3,6 +3,7 @@ import {
   ConflictException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Prisma, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
@@ -18,6 +19,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let prisma: jest.Mocked<PrismaService>;
   let jwt: jest.Mocked<JwtService>;
+  let config: jest.Mocked<ConfigService>;
 
   function buildUser(overrides: Partial<{
     id: bigint;
@@ -61,16 +63,53 @@ describe('AuthService', () => {
   }
 
   beforeEach(() => {
+    // RefreshToken record mock — buildAuthResult 안의 issueRefreshToken 이
+    // create 로 id 받고 → JWT sign → bcrypt.hash 후 update 한다.
+    let refreshTokenSeq = 0n;
     prisma = {
       user: {
         findFirst: jest.fn(),
         create: jest.fn(),
       },
+      refreshToken: {
+        create: jest.fn().mockImplementation(async ({ data }) => ({
+          id: ++refreshTokenSeq,
+          userId: data.userId,
+          tokenHash: data.tokenHash,
+          expiresAt: data.expiresAt,
+          parentId: data.parentId ?? null,
+          rotatedAt: null,
+          revokedAt: null,
+          revokeReason: null,
+          issuedAt: new Date(),
+          createdAt: new Date(),
+        })),
+        update: jest.fn().mockResolvedValue(undefined),
+        findFirst: jest.fn(),
+        updateMany: jest.fn(),
+      },
+      $transaction: jest.fn(async (fn) => fn(prisma)),
     } as unknown as jest.Mocked<PrismaService>;
+
+    // access('fake-jwt') 와 refresh('fake-refresh') 를 호출 순서대로 반환.
     jwt = {
-      signAsync: jest.fn().mockResolvedValue('fake-jwt'),
+      signAsync: jest.fn().mockImplementation(async (_payload: unknown, options?: { secret?: string }) =>
+        options?.secret ? 'fake-refresh' : 'fake-jwt',
+      ),
+      verifyAsync: jest.fn(),
     } as unknown as jest.Mocked<JwtService>;
-    service = new AuthService(prisma, jwt);
+
+    config = {
+      get: jest.fn().mockImplementation((key: string) =>
+        key === 'JWT_REFRESH_SECRET'
+          ? 'test-refresh-secret'
+          : key === 'JWT_REFRESH_EXPIRES_IN'
+            ? '14d'
+            : undefined,
+      ),
+    } as unknown as jest.Mocked<ConfigService>;
+
+    service = new AuthService(prisma, jwt, config);
   });
 
   describe('signup', () => {
@@ -106,9 +145,15 @@ describe('AuthService', () => {
       expect(created.marketingConsentedAt).toBeNull();
 
       expect(result.accessToken).toBe('fake-jwt');
+      expect(result.refreshToken).toBe('fake-refresh');
       expect(result.user.email).toBe('new@pinch.local');
       expect(jwt.signAsync).toHaveBeenCalledWith(
         expect.objectContaining({ sub: '42', email: 'new@pinch.local', role: UserRole.WORKER }),
+      );
+      // refresh sign 은 별도 secret 옵션과 함께
+      expect(jwt.signAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ sub: '42', tid: expect.any(String) }),
+        expect.objectContaining({ secret: 'test-refresh-secret' }),
       );
     });
 
@@ -193,6 +238,7 @@ describe('AuthService', () => {
       });
 
       expect(result.accessToken).toBe('fake-jwt');
+      expect(result.refreshToken).toBe('fake-refresh');
       expect(result.user.email).toBe('worker001@pinch.local');
       expect(result.user.id).toBe('7');
     });
@@ -251,6 +297,193 @@ describe('AuthService', () => {
       expect(created.oauthProvider).toBe('kakao');
       expect(created.oauthId).toBe('k-new');
       expect(created.passwordHash).toBeUndefined();
+    });
+  });
+
+  describe('refresh', () => {
+    function refreshRecord(overrides: Partial<{
+      id: bigint;
+      userId: bigint;
+      tokenHash: string;
+      expiresAt: Date;
+      revokedAt: Date | null;
+      revokeReason: string | null;
+      rotatedAt: Date | null;
+      parentId: bigint | null;
+    }> = {}) {
+      return {
+        id: 100n,
+        userId: 7n,
+        tokenHash: 'PLACEHOLDER',
+        issuedAt: new Date(),
+        expiresAt: new Date(Date.now() + 86_400_000),
+        revokedAt: null,
+        revokeReason: null,
+        rotatedAt: null,
+        parentId: null,
+        createdAt: new Date(),
+        ...overrides,
+      };
+    }
+
+    it('JWT verify 실패 시 401 INVALID_REFRESH', async () => {
+      (jwt.verifyAsync as jest.Mock).mockRejectedValue(new Error('jwt malformed'));
+
+      await expect(service.refresh('bad-token')).rejects.toMatchObject({
+        status: 401,
+        response: { message: 'INVALID_REFRESH' },
+      });
+    });
+
+    it('DB record 미존재 시 401 INVALID_REFRESH', async () => {
+      (jwt.verifyAsync as jest.Mock).mockResolvedValue({ sub: '7', tid: '100' });
+      (prisma.refreshToken.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.refresh('any')).rejects.toMatchObject({
+        status: 401,
+        response: { message: 'INVALID_REFRESH' },
+      });
+    });
+
+    it('bcrypt 불일치 시 401 INVALID_REFRESH', async () => {
+      (jwt.verifyAsync as jest.Mock).mockResolvedValue({ sub: '7', tid: '100' });
+      const hash = await bcrypt.hash('other-raw-token', 4);
+      (prisma.refreshToken.findFirst as jest.Mock).mockResolvedValue(
+        refreshRecord({ tokenHash: hash }),
+      );
+
+      await expect(service.refresh('wrong-raw-token')).rejects.toMatchObject({
+        status: 401,
+        response: { message: 'INVALID_REFRESH' },
+      });
+    });
+
+    it('revoked 토큰 재사용 시 REUSE 감지 + 모든 활성 refresh 무효화', async () => {
+      (jwt.verifyAsync as jest.Mock).mockResolvedValue({ sub: '7', tid: '100' });
+      const rawToken = 'reused-raw-token';
+      const hash = await bcrypt.hash(rawToken, 4);
+      (prisma.refreshToken.findFirst as jest.Mock).mockResolvedValue(
+        refreshRecord({ tokenHash: hash, revokedAt: new Date(), revokeReason: 'ROTATED' }),
+      );
+
+      await expect(service.refresh(rawToken)).rejects.toMatchObject({
+        status: 401,
+        response: { message: 'REFRESH_REUSE_DETECTED' },
+      });
+
+      // revokeAllForUser 호출 검증
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 7n, revokedAt: null },
+        data: expect.objectContaining({ revokeReason: 'REUSE_DETECTED' }),
+      });
+    });
+
+    it('soft-deleted user 시 401 INVALID_REFRESH', async () => {
+      (jwt.verifyAsync as jest.Mock).mockResolvedValue({ sub: '7', tid: '100' });
+      const rawToken = 'valid-raw-token';
+      const hash = await bcrypt.hash(rawToken, 4);
+      (prisma.refreshToken.findFirst as jest.Mock).mockResolvedValue(
+        refreshRecord({ tokenHash: hash }),
+      );
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.refresh(rawToken)).rejects.toMatchObject({
+        status: 401,
+        response: { message: 'INVALID_REFRESH' },
+      });
+    });
+
+    it('정상 회전 — 기존 record revoked + 새 access/refresh 발급', async () => {
+      (jwt.verifyAsync as jest.Mock).mockResolvedValue({ sub: '7', tid: '100' });
+      const rawToken = 'good-raw-token';
+      const hash = await bcrypt.hash(rawToken, 4);
+      (prisma.refreshToken.findFirst as jest.Mock).mockResolvedValue(
+        refreshRecord({ id: 100n, userId: 7n, tokenHash: hash }),
+      );
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(
+        buildUser({ id: 7n, email: 'worker@pinch.local' }),
+      );
+
+      const result = await service.refresh(rawToken);
+
+      expect(result.accessToken).toBe('fake-jwt');
+      expect(result.refreshToken).toBe('fake-refresh');
+      expect(result.user.id).toBe('7');
+
+      // 기존 record 회전 (revoked=ROTATED + rotatedAt)
+      expect(prisma.refreshToken.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 100n },
+          data: expect.objectContaining({ revokeReason: 'ROTATED' }),
+        }),
+      );
+
+      // 새 record 발급 (parentId=100)
+      expect(prisma.refreshToken.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ userId: 7n, parentId: 100n }),
+        }),
+      );
+    });
+  });
+
+  describe('logout', () => {
+    it('JWT verify 실패도 silent 통과', async () => {
+      (jwt.verifyAsync as jest.Mock).mockRejectedValue(new Error('jwt malformed'));
+      await expect(service.logout('garbage')).resolves.toBeUndefined();
+      expect(prisma.refreshToken.update).not.toHaveBeenCalled();
+    });
+
+    it('record 미존재도 silent 통과', async () => {
+      (jwt.verifyAsync as jest.Mock).mockResolvedValue({ sub: '7', tid: '100' });
+      (prisma.refreshToken.findFirst as jest.Mock).mockResolvedValue(null);
+      await expect(service.logout('any')).resolves.toBeUndefined();
+      expect(prisma.refreshToken.update).not.toHaveBeenCalled();
+    });
+
+    it('이미 revoked 된 record 도 silent 통과', async () => {
+      (jwt.verifyAsync as jest.Mock).mockResolvedValue({ sub: '7', tid: '100' });
+      (prisma.refreshToken.findFirst as jest.Mock).mockResolvedValue({
+        id: 100n,
+        userId: 7n,
+        tokenHash: await bcrypt.hash('raw', 4),
+        revokedAt: new Date(),
+        revokeReason: 'ROTATED',
+        rotatedAt: new Date(),
+        parentId: null,
+        issuedAt: new Date(),
+        expiresAt: new Date(Date.now() + 86_400_000),
+        createdAt: new Date(),
+      });
+
+      await expect(service.logout('raw')).resolves.toBeUndefined();
+      expect(prisma.refreshToken.update).not.toHaveBeenCalled();
+    });
+
+    it('정상 logout — record revoked=LOGOUT 으로 업데이트', async () => {
+      (jwt.verifyAsync as jest.Mock).mockResolvedValue({ sub: '7', tid: '100' });
+      const rawToken = 'good-raw';
+      (prisma.refreshToken.findFirst as jest.Mock).mockResolvedValue({
+        id: 100n,
+        userId: 7n,
+        tokenHash: await bcrypt.hash(rawToken, 4),
+        revokedAt: null,
+        revokeReason: null,
+        rotatedAt: null,
+        parentId: null,
+        issuedAt: new Date(),
+        expiresAt: new Date(Date.now() + 86_400_000),
+        createdAt: new Date(),
+      });
+
+      await service.logout(rawToken);
+
+      expect(prisma.refreshToken.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 100n },
+          data: expect.objectContaining({ revokeReason: 'LOGOUT' }),
+        }),
+      );
     });
   });
 });

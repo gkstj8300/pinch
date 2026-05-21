@@ -5,9 +5,9 @@
 | 항목 | 내용 |
 |------|------|
 | 문서명 | PINCH API 명세 |
-| 버전 | v0.2.0 |
+| 버전 | v0.3.0 |
 | 작성일 | 2026-05-21 |
-| 기반 문서 | .claude/설계서.md, .claude/plans/01-mobile-login-flow.md, apps/api/prisma/schema.prisma, apps/api/src/auth/auth.controller.ts, apps/api/src/auth/auth.service.ts |
+| 기반 문서 | .claude/설계서.md, .claude/plans/01-mobile-login-flow.md, .claude/plans/02-refresh-token-rotation.md, apps/api/prisma/schema.prisma, apps/api/src/auth/auth.controller.ts, apps/api/src/auth/auth.service.ts |
 
 ### 변경 이력
 
@@ -15,6 +15,7 @@
 |------|------|--------|-----------|
 | v0.1.0 | 2026-05-11 | — | 5개 핵심 엔드포인트 초안 정의 (Auth / Job Search / Apply / Check-in / Settlement) |
 | v0.2.0 | 2026-05-21 | — | §3.1 Auth 전면 재작성 — 핸드폰 OTP(`/auth/otp/send`, `/auth/otp/verify`) 제거. 이메일+비밀번호 자체 인증(`/auth/login`, `/auth/signup`) + 카카오 OAuth(`/auth/oauth/kakao`) + JWT 검증(`/auth/me`) 도입. JWT payload `phone` → `email` 전환. user 응답에서 `phone` 제거, `email`/`name`/`isVerified` 포함. `refreshToken` 은 미발급(F-07 별도). 응답 envelope 미적용(현 컨트롤러 직접 반환). §6 Slice 활성화 일정에 Auth 를 Slice 2 로 끌어올림 (자체/카카오 인증은 NICE/다날 외부 인프라 의존 없음). [기반: plans/01-mobile-login-flow.md v0.2.0] |
+| v0.3.0 | 2026-05-21 | — | F-07 적용 — §3.1 에 `POST /auth/refresh` + `POST /auth/logout` 추가. `/auth/login` · `/auth/signup` · `/auth/oauth/kakao` 응답에 `refreshToken` 필드 포함. JWT access 토큰 TTL `1d` → `15m` 단축, refresh 14d. Reuse 감지 정책(REFRESH_REUSE_DETECTED 시 user 의 모든 활성 refresh 무효화) 명시. §6 Slice 활성화 일정에서 `/auth/refresh` 를 Slice 2 로 이동(F-11 OTP 만 Slice 3 잔류). [기반: plans/02-refresh-token-rotation.md v0.1.0] |
 
 ---
 
@@ -126,6 +127,7 @@ GET /jobs/search?lat=...&lng=...&cursor=<opaque>&limit=20
 ```json
 {
   "accessToken": "eyJhbGciOi...",
+  "refreshToken": "eyJhbGciOi...",
   "user": {
     "id": "201",
     "email": "newuser@pinch.local",
@@ -165,6 +167,7 @@ GET /jobs/search?lat=...&lng=...&cursor=<opaque>&limit=20
 ```json
 {
   "accessToken": "eyJhbGciOi...",
+  "refreshToken": "eyJhbGciOi...",
   "user": {
     "id": "42",
     "email": "worker001@pinch.local",
@@ -174,6 +177,8 @@ GET /jobs/search?lat=...&lng=...&cursor=<opaque>&limit=20
   }
 }
 ```
+
+> Access 토큰 TTL `JWT_EXPIRES_IN=15m`, Refresh `JWT_REFRESH_EXPIRES_IN=14d`. 만료된 access 는 `/auth/refresh` 로 자동 회전 (모바일 axios interceptor 가 1회 재시도 후 원 요청 replay).
 
 **Errors:**
 
@@ -202,7 +207,7 @@ GET /jobs/search?lat=...&lng=...&cursor=<opaque>&limit=20
 | `code` | string | ✓ | MaxLength 255 |
 | `redirectUri` | string | ✓ | URL 형식, MaxLength 500. **카카오 콘솔에 등록된 URI 와 동일해야 함** (토큰 교환 시 카카오 측 검증) |
 
-**Response (200):** `/auth/login` 응답과 동일 구조. 신규 사용자면 자동 가입 (`oauth_provider='kakao'`, `oauth_id=<카카오 user id>`). 별명 충돌 시 백엔드가 `_1`, `_2` ... 접미어를 부여하여 unique 보장.
+**Response (200):** `/auth/login` 응답과 동일 구조 (`accessToken` + `refreshToken` + `user`). 신규 사용자면 자동 가입 (`oauth_provider='kakao'`, `oauth_id=<카카오 user id>`). 별명 충돌 시 백엔드가 `_1`, `_2` ... 접미어를 부여하여 unique 보장.
 
 **Errors:**
 
@@ -239,9 +244,57 @@ JWT 검증 + 현재 사용자 컨텍스트 반환. 모바일 부팅 시 자동 �
 
 ---
 
-#### `POST /auth/refresh` (미구현 — F-07)
+#### `POST /auth/refresh`
 
-Refresh Token 회전. 현재 `/auth/login` · `/auth/signup` · `/auth/oauth/kakao` 는 **accessToken 만** 발급 (refreshToken 미발급). 액세스 토큰 만료 시 사용자가 다시 로그인해야 함. 회전 도입은 후속 작업 F-07 참조.
+Refresh token 회전 — 기존 refresh 를 새 (access, refresh) 쌍으로 교환. 이전 refresh 는 즉시 무효화되고, 재사용 시 reuse 감지로 해당 user 의 모든 활성 세션이 일괄 무효화된다.
+
+**Request:**
+
+```json
+{ "refreshToken": "eyJhbGciOi..." }
+```
+
+| 필드 | 타입 | 필수 | 검증 |
+|---|---|---|---|
+| `refreshToken` | string | ✓ | `JWT_REFRESH_SECRET` 으로 서명된 JWT, MaxLength 500 |
+
+**Response (200):** `/auth/login` 응답과 동일 구조 (`accessToken` + `refreshToken` + `user`).
+
+**Errors:**
+
+| HTTP | code | 시나리오 |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | DTO 누락/형식 오류 |
+| 401 | `INVALID_REFRESH` | JWT 검증 실패(위조/만료) 또는 DB record 미일치 / bcrypt 불일치 / soft-deleted user |
+| 401 | `REFRESH_REUSE_DETECTED` | 이미 회전된(또는 logout 된) refresh 가 재사용됨 — 해당 user 의 모든 활성 refresh 가 함께 무효화됨 (탈취 의심) |
+
+> **동작 노트** (`apps/api/src/auth/auth.service.ts`):
+> - JWT payload 의 `tid` 로 단일 record 만 조회 → 1회 bcrypt — O(1)
+> - 정상 회전 시 트랜잭션 안에서 기존 record `revoked_at`/`rotated_at` 채움 + 새 record 발급 (parent_id 로 회전 체인 추적)
+> - reuse 감지는 `revoked_at !== null` 인 record 가 매칭됐을 때 → `revokeAllForUser('REUSE_DETECTED')`
+
+---
+
+#### `POST /auth/logout`
+
+서버측 refresh 무효화. **idempotent** — 검증 실패/미일치/만료 모두 204 (silent 통과).
+
+**Request:**
+
+```json
+{ "refreshToken": "eyJhbGciOi..." }
+```
+
+**Response:** 204 No Content
+
+**Errors:**
+
+| HTTP | code | 시나리오 |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | DTO 누락 |
+
+> Access 토큰은 클라이언트가 폐기. 서버측 즉시 무효화(blacklist) 는 후속 작업.
+> 모바일의 `clearSession` 은 best-effort 로 `/auth/logout` 을 호출 — 네트워크 실패해도 로컬 토큰 + Zustand user 무효화는 끝까지 수행.
 
 ---
 
@@ -249,6 +302,8 @@ Refresh Token 회전. 현재 `/auth/login` · `/auth/signup` · `/auth/oauth/kak
 
 ```typescript
 // apps/api/src/auth/types.ts
+
+// Access token — 일반 요청의 Authorization 헤더에 실리는 JWT
 interface JwtPayload {
   sub: string;        // user id (BigInt → string)
   email: string;
@@ -256,9 +311,17 @@ interface JwtPayload {
   iat?: number;
   exp?: number;
 }
+
+// Refresh token — /auth/refresh body 에 실리는 별도 JWT (별도 secret)
+interface RefreshJwtPayload {
+  sub: string;        // user id
+  tid: string;        // refresh_tokens.id — DB lookup key
+  iat?: number;
+  exp?: number;
+}
 ```
 
-> v0.1.0 의 `phone` 필드 → v0.2.0 에서 `email` 로 교체.
+> v0.1.0 의 `phone` 필드 → v0.2.0 에서 `email` 로 교체. v0.3.0 에서 RefreshJwtPayload 추가.
 
 ---
 
@@ -598,10 +661,10 @@ PENDING ──apply()──▶ MATCHED ──check-in──▶ CHECKED_IN ──
 | Slice | 활성 엔드포인트 |
 |---|---|
 | Slice 1 | `POST /matches/apply` |
-| **Slice 2 (현재)** | Auth: `/auth/signup`, `/auth/login`, `/auth/oauth/kakao`, `/auth/me` · Jobs/Matches: `/jobs/search`, `/jobs/:id`, `/matches/:id/qr`, `/matches/:id/check-in`, `/matches/:id/check-out`, `/matches/:id/approve` |
-| Slice 3 | `/auth/refresh` (F-07), `/auth/otp/*` (F-11 NICE/다날), `/wallet/*` |
+| **Slice 2 (현재)** | Auth: `/auth/signup`, `/auth/login`, `/auth/oauth/kakao`, `/auth/me`, **`/auth/refresh`**, **`/auth/logout`** · Jobs/Matches: `/jobs/search`, `/jobs/:id`, `/matches/:id/qr`, `/matches/:id/check-in`, `/matches/:id/check-out`, `/matches/:id/approve` |
+| Slice 3 | `/auth/otp/*` (F-11 NICE/다날), `/wallet/*` |
 
-> v0.2.0: Auth 자체 인증/카카오 OAuth 는 외부 인프라 의존이 없어 Slice 2 로 끌어올렸다. NICE/다날 본인 인증과 Refresh Token 회전은 그대로 Slice 3.
+> v0.3.0: Refresh Token 회전(F-07) 이 Slice 2 로 합류했다. NICE/다날 본인 인증만 Slice 3 잔류.
 
 ---
 
