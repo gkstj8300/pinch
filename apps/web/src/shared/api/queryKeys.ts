@@ -6,4 +6,8 @@ export const queryKeys = {
   auth: {
     me: () => ['auth', 'me'] as const,
   },
+  jobs: {
+    my: (page: number, limit: number) => ['jobs', 'my', page, limit] as const,
+    detail: (id: string) => ['jobs', 'detail', id] as const,
+  },
 } as const;

@@ -1,11 +1,14 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type Job } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { SearchJobsQueryDto } from './dto/search-jobs.dto';
+import type { CreateJobDto } from './dto/create-job.dto';
+import type { MyJobsQueryDto } from './dto/my-jobs-query.dto';
 
 interface JobSearchRow {
   id: bigint;
@@ -124,6 +127,63 @@ export class JobsService {
   }
 
   /**
+   * 사업주 공고 등록 — JWT sub(clientId) 로 ownership 자동 할당.
+   *   - startAt/endAt 검증 (시간 범위, 과거 시점)
+   *   - estimatedMinutes 는 자동 계산
+   *   - PostGIS location 은 DB 트리거가 lat/lng 에서 동기화
+   */
+  async createForClient(clientId: bigint, dto: CreateJobDto): Promise<Job> {
+    const startAt = new Date(dto.startAt);
+    const endAt = new Date(dto.endAt);
+    if (startAt >= endAt) {
+      throw new BadRequestException('INVALID_TIME_RANGE');
+    }
+    if (startAt.getTime() < Date.now()) {
+      throw new BadRequestException('START_IN_PAST');
+    }
+    const estimatedMinutes = Math.round((endAt.getTime() - startAt.getTime()) / 60_000);
+
+    return this.prisma.job.create({
+      data: {
+        clientId,
+        title: dto.title,
+        description: dto.description,
+        category: dto.category,
+        address: dto.address,
+        latitude: new Prisma.Decimal(dto.latitude),
+        longitude: new Prisma.Decimal(dto.longitude),
+        startAt,
+        endAt,
+        hourlyWage: dto.hourlyWage,
+        estimatedMinutes,
+        recruitCount: dto.recruitCount,
+      },
+    });
+  }
+
+  /**
+   * 사업주 본인 공고 목록 — created_at desc, offset 페이지네이션.
+   * soft-deleted 제외. `(client_id, deleted_at)` 인덱스 활용.
+   */
+  async findMyJobs(
+    clientId: bigint,
+    query: MyJobsQueryDto,
+  ): Promise<{ items: Job[]; total: number; page: number; limit: number }> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.job.findMany({
+        where: { clientId, deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.job.count({ where: { clientId, deletedAt: null } }),
+    ]);
+    return { items, total, page, limit };
+  }
+
+  /**
    * 공고 상세 — 사업주 정보(이름·평점·리뷰 수) 포함.
    */
   async findOne(id: bigint) {
@@ -167,6 +227,34 @@ export class JobsService {
       },
     };
   }
+}
+
+/**
+ * Prisma Job → API 응답 shape.
+ *   - BigInt → string, Decimal/Date → primitive
+ *   - estimatedPay 계산
+ *   - location(PostGIS) 은 응답에서 제외
+ */
+export function toJobApiShape(job: Job) {
+  return {
+    id: job.id.toString(),
+    title: job.title,
+    description: job.description,
+    category: job.category,
+    address: job.address,
+    latitude: Number(job.latitude),
+    longitude: Number(job.longitude),
+    startAt: job.startAt,
+    endAt: job.endAt,
+    hourlyWage: job.hourlyWage,
+    estimatedMinutes: job.estimatedMinutes,
+    estimatedPay: Math.floor((job.hourlyWage * job.estimatedMinutes) / 60),
+    recruitCount: job.recruitCount,
+    confirmedCount: job.confirmedCount,
+    checkInRadiusM: job.checkInRadiusM,
+    status: job.status,
+    createdAt: job.createdAt,
+  };
 }
 
 function toApiShape(row: JobSearchRow) {
