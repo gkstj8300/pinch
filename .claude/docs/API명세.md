@@ -5,15 +5,16 @@
 | 항목 | 내용 |
 |------|------|
 | 문서명 | PINCH API 명세 |
-| 버전 | v0.1.0 |
-| 작성일 | 2026-05-11 |
-| 기반 문서 | .claude/설계서.md, .claude/PINCH_Prompts_Phase1.md, prisma/schema.prisma |
+| 버전 | v0.2.0 |
+| 작성일 | 2026-05-21 |
+| 기반 문서 | .claude/설계서.md, .claude/plans/01-mobile-login-flow.md, apps/api/prisma/schema.prisma, apps/api/src/auth/auth.controller.ts, apps/api/src/auth/auth.service.ts |
 
 ### 변경 이력
 
 | 버전 | 날짜 | 작성자 | 변경 내용 |
 |------|------|--------|-----------|
-| v0.1.0 | 2026-05-11 | Claude | 5개 핵심 엔드포인트 초안 정의 (Auth / Job Search / Apply / Check-in / Settlement) |
+| v0.1.0 | 2026-05-11 | — | 5개 핵심 엔드포인트 초안 정의 (Auth / Job Search / Apply / Check-in / Settlement) |
+| v0.2.0 | 2026-05-21 | — | §3.1 Auth 전면 재작성 — 핸드폰 OTP(`/auth/otp/send`, `/auth/otp/verify`) 제거. 이메일+비밀번호 자체 인증(`/auth/login`, `/auth/signup`) + 카카오 OAuth(`/auth/oauth/kakao`) + JWT 검증(`/auth/me`) 도입. JWT payload `phone` → `email` 전환. user 응답에서 `phone` 제거, `email`/`name`/`isVerified` 포함. `refreshToken` 은 미발급(F-07 별도). 응답 envelope 미적용(현 컨트롤러 직접 반환). §6 Slice 활성화 일정에 Auth 를 Slice 2 로 끌어올림 (자체/카카오 인증은 NICE/다날 외부 인프라 의존 없음). [기반: plans/01-mobile-login-flow.md v0.2.0] |
 
 ---
 
@@ -90,17 +91,72 @@ GET /jobs/search?lat=...&lng=...&cursor=<opaque>&limit=20
 
 ## 3. 엔드포인트 명세
 
-### 3.1 Auth — 핸드폰 OTP 인증
+### 3.1 Auth — 이메일+비밀번호 자체 인증 + 카카오 OAuth
 
-#### `POST /auth/otp/send`
+워커 모바일 앱 인증. 핸드폰 OTP 는 NICE/다날 외부 인프라가 필요하여 별도 Slice 로 이관 (§13 후속 작업 F-11). 본 Slice 는 이메일 자체 인증과 카카오 OAuth 만 다룬다.
 
-OTP 전송 (NICE/Aligo 등).
+> **응답 envelope 노트**: §2.2 의 `{ data: ... }` envelope 는 v0.2.0 현재 Auth 컨트롤러에는 미적용. 컨트롤러가 객체를 직접 반환한다. (NestJS `ClassSerializerInterceptor` 또는 전역 응답 변환 인터셉터 도입 시 envelope 활성화 — 별도 작업)
+
+#### `POST /auth/signup`
+
+이메일+비밀번호 회원가입 → 가입 직후 JWT 발급(자동 로그인). `role` 은 워커앱 전용이므로 항상 `WORKER` 로 고정.
 
 **Request:**
 
 ```json
 {
-  "phone": "01012345678"
+  "email": "newuser@pinch.local",
+  "password": "pinch1234!",
+  "name": "새워커",
+  "termsAgreed": true,
+  "marketingConsented": false
+}
+```
+
+| 필드 | 타입 | 필수 | 검증 |
+|---|---|---|---|
+| `email` | string | ✓ | RFC IsEmail, MaxLength 255 |
+| `password` | string | ✓ | 8~72자 (bcrypt 입력 한계) |
+| `name` | string | ✓ | 2~50자, **별명 unique** |
+| `termsAgreed` | boolean | ✓ | 만 14세 이상 + 이용약관 동의 모두 충족 시 true |
+| `marketingConsented` | boolean | | 선택 동의. 미전송 시 false 취급 |
+
+**Response (201):**
+
+```json
+{
+  "accessToken": "eyJhbGciOi...",
+  "user": {
+    "id": "201",
+    "email": "newuser@pinch.local",
+    "name": "새워커",
+    "role": "WORKER",
+    "isVerified": false
+  }
+}
+```
+
+**Errors:**
+
+| HTTP | code | 시나리오 |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | DTO 검증 실패 |
+| 400 | `TERMS_REQUIRED` | `termsAgreed=false` 로 전송 |
+| 409 | `EMAIL_TAKEN` | 동일 이메일 사용자 존재 (Prisma P2002 — `users_email_key`) |
+| 409 | `NAME_TAKEN` | 동일 별명 사용자 존재 (Prisma P2002 — `users_name_key`) |
+
+---
+
+#### `POST /auth/login`
+
+이메일+비밀번호 로그인. 이메일 존재 여부 누설을 막기 위해 미존재/비밀번호 불일치 모두 동일한 401 응답.
+
+**Request:**
+
+```json
+{
+  "email": "worker001@pinch.local",
+  "password": "pinch1234!"
 }
 ```
 
@@ -108,60 +164,101 @@ OTP 전송 (NICE/Aligo 등).
 
 ```json
 {
-  "data": {
-    "issuedAt": "2026-05-11T14:30:00+09:00",
-    "expiresIn": 180,
-    "challengeId": "ch_a8f3..."
+  "accessToken": "eyJhbGciOi...",
+  "user": {
+    "id": "42",
+    "email": "worker001@pinch.local",
+    "name": "워커001",
+    "role": "WORKER",
+    "isVerified": false
   }
 }
 ```
 
-**Errors:** `400 VALIDATION_ERROR`, `429 RATE_LIMITED` (분당 3회 제한)
+**Errors:**
+
+| HTTP | code | 시나리오 |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | DTO 검증 실패 |
+| 401 | `INVALID_CREDENTIALS` | 이메일 미존재 또는 비밀번호 불일치 (구분하지 않음) |
 
 ---
 
-#### `POST /auth/otp/verify`
+#### `POST /auth/oauth/kakao`
 
-OTP 검증 → JWT 발급.
+카카오 OAuth 콜백. 모바일이 `expo-auth-session` 으로 받은 인가 코드를 백엔드에 위임 → 카카오 토큰 교환 → 사용자 upsert → JWT 발급.
 
 **Request:**
 
 ```json
 {
-  "challengeId": "ch_a8f3...",
-  "code": "123456"
+  "code": "kakao-authorization-code",
+  "redirectUri": "https://auth.expo.io/@username/pinch-mobile"
 }
 ```
+
+| 필드 | 타입 | 필수 | 검증 |
+|---|---|---|---|
+| `code` | string | ✓ | MaxLength 255 |
+| `redirectUri` | string | ✓ | URL 형식, MaxLength 500. **카카오 콘솔에 등록된 URI 와 동일해야 함** (토큰 교환 시 카카오 측 검증) |
+
+**Response (200):** `/auth/login` 응답과 동일 구조. 신규 사용자면 자동 가입 (`oauth_provider='kakao'`, `oauth_id=<카카오 user id>`). 별명 충돌 시 백엔드가 `_1`, `_2` ... 접미어를 부여하여 unique 보장.
+
+**Errors:**
+
+| HTTP | code | 시나리오 |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | DTO 검증 실패 |
+| 409 | `EMAIL_TAKEN_BY_LOCAL` | 같은 이메일이 이미 이메일+비밀번호 가입에 사용 중 |
+| 409 | `OAUTH_DUPLICATE` | OAuth 사용자 upsert 중 unique 충돌 (희소) |
+| 502 | `KAKAO_API_ERROR` | 카카오 token/userinfo 호출 실패 |
+
+> Expo Go 환경(SDK 53+) 은 `auth.expo.io` 프록시가 deprecated 되어 동적 URI 가 발급되며, 카카오 콘솔은 http(s):// 만 등록 허용 → KOE006. 따라서 카카오 OAuth 는 **EAS Dev Build / Standalone** 에서만 실동작. Expo Go 에서는 모바일이 진입 직전 "준비 중" Alert 로 종료. (모바일: `KakaoLoginButton.tsx`)
+
+---
+
+#### `GET /auth/me`
+
+JWT 검증 + 현재 사용자 컨텍스트 반환. 모바일 부팅 시 자동 로그인 검증 (SecureStore 의 토큰을 `/auth/me` 로 확인).
+
+**Auth:** `Authorization: Bearer <accessToken>`
 
 **Response (200):**
 
 ```json
 {
-  "data": {
-    "accessToken": "eyJhbGciOi...",
-    "refreshToken": "eyJhbGciOi...",
-    "expiresIn": 3600,
-    "user": {
-      "id": "42",
-      "phone": "01012345678",
-      "name": "홍길동",
-      "role": "WORKER",
-      "isVerified": false
-    }
-  }
+  "id": "42",
+  "email": "worker001@pinch.local",
+  "role": "WORKER"
 }
 ```
 
-**Errors:** `401 INVALID_OTP`, `410 OTP_EXPIRED`
+> v0.2.0 현재 `/auth/me` 응답은 `id`/`email`/`role` 만 포함 (컨트롤러 명시 반환). 별명/`isVerified` 가 모바일 home 화면에 필요해질 경우 응답 확장 필요 — 별도 작업.
+
+**Errors:** `401 UNAUTHENTICATED` (JWT 누락/만료/위조)
 
 ---
 
-#### `POST /auth/refresh`
+#### `POST /auth/refresh` (미구현 — F-07)
 
-토큰 갱신.
+Refresh Token 회전. 현재 `/auth/login` · `/auth/signup` · `/auth/oauth/kakao` 는 **accessToken 만** 발급 (refreshToken 미발급). 액세스 토큰 만료 시 사용자가 다시 로그인해야 함. 회전 도입은 후속 작업 F-07 참조.
 
-**Request:** `{ "refreshToken": "..." }`
-**Response:** Access/Refresh 한 쌍 재발급.
+---
+
+#### JWT Payload
+
+```typescript
+// apps/api/src/auth/types.ts
+interface JwtPayload {
+  sub: string;        // user id (BigInt → string)
+  email: string;
+  role: 'WORKER' | 'CLIENT' | 'ADMIN';
+  iat?: number;
+  exp?: number;
+}
+```
+
+> v0.1.0 의 `phone` 필드 → v0.2.0 에서 `email` 로 교체.
 
 ---
 
@@ -500,9 +597,11 @@ PENDING ──apply()──▶ MATCHED ──check-in──▶ CHECKED_IN ──
 
 | Slice | 활성 엔드포인트 |
 |---|---|
-| **Slice 1 (현재)** | `POST /matches/apply` |
-| Slice 2 | `/jobs/search`, `/jobs/:id`, `/matches/:id/qr`, `/matches/:id/check-in`, `/matches/:id/check-out`, `/matches/:id/approve` |
-| Slice 3 | `/auth/*`, `/wallet/*` |
+| Slice 1 | `POST /matches/apply` |
+| **Slice 2 (현재)** | Auth: `/auth/signup`, `/auth/login`, `/auth/oauth/kakao`, `/auth/me` · Jobs/Matches: `/jobs/search`, `/jobs/:id`, `/matches/:id/qr`, `/matches/:id/check-in`, `/matches/:id/check-out`, `/matches/:id/approve` |
+| Slice 3 | `/auth/refresh` (F-07), `/auth/otp/*` (F-11 NICE/다날), `/wallet/*` |
+
+> v0.2.0: Auth 자체 인증/카카오 OAuth 는 외부 인프라 의존이 없어 Slice 2 로 끌어올렸다. NICE/다날 본인 인증과 Refresh Token 회전은 그대로 Slice 3.
 
 ---
 
