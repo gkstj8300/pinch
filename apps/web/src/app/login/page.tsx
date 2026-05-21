@@ -15,7 +15,7 @@ export default function LoginPage() {
         className="flex w-full max-w-md flex-col items-center gap-(--spacing-07) rounded-(--radius-03) border border-(--color-gray-20) bg-(--color-gray-0) p-9 shadow-[4px_4px_10px_0_rgba(0,0,0,0.1)]"
       >
         <header className="flex flex-col items-center justify-center">
-          <Logo variant="primary" size={50} priority alt="PINCH" />
+          <Logo variant="icon" size={50} priority alt="PINCH" />
           <h1 className="text-xl font-semibold text-(--color-text-primary)">
             핀치 사업주 시스템
           </h1>
