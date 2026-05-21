@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/**
+ * PINCH 디자인 토큰 매핑 — packages/ui-tokens/src/tokens.ts 와 1:1.
+ * 토큰 변경 시 양쪽 동시 갱신 (자동화는 컴포넌트 수 증가 시 검토).
+ */
+@theme {
+  /* Brand Identity */
+  --color-identity: #fa2454;
+  --color-identity-hover: #ef0035;
+  --color-identity-sub: #ffd1dc;
+
+  /* Gray scale */
+  --color-gray-0: #fdfdfd;
+  --color-gray-10: #e9edf0;
+  --color-gray-20: #e0e4e8;
+  --color-gray-30: #cfd3d8;
+  --color-gray-40: #b4b9be;
+  --color-gray-50: #8e949a;
+  --color-gray-60: #757b82;
+  --color-gray-70: #4a4f55;
+  --color-gray-80: #2e3236;
+  --color-gray-90: #202225;
+
+  /* Background */
+  --color-bg-primary: #fdfdfd;
+  --color-bg-secondary: #f3f5f7;
+  --color-bg-tertiary: #e9edf0;
+  --color-bg-identity: #fa2454;
+  --color-bg-identity-sub: #ffd1dc;
+
+  /* Text */
+  --color-text-primary: #202225;
+  --color-text-secondary: #4a4f55;
+  --color-text-tertiary: #757b82;
+  --color-text-quaternary: #b4b9be;
+  --color-text-inverse: #fdfdfd;
+  --color-text-identity: #fa2454;
+  --color-text-identity-strong: #ef0035;
+
+  /* Border */
+  --color-border-primary: #4a4f55;
+  --color-border-secondary: #b4b9be;
+  --color-border-tertiary: #e0e4e8;
+  --color-border-identity: #fa2454;
+
+  /* Support */
+  --color-success: #1eb96e;
+  --color-success-subtle: #e7f5ec;
+  --color-error: #ea2831;
+  --color-error-subtle: #fbe8e9;
+  --color-info: #175eff;
+  --color-info-subtle: #e6edfd;
+
+  /* Spacing (8-base) */
+  --spacing-01: 0.25rem;  /* 4px */
+  --spacing-02: 0.5rem;   /* 8px */
+  --spacing-03: 0.75rem;  /* 12px */
+  --spacing-04: 1rem;     /* 16px */
+  --spacing-05: 1.25rem;  /* 20px */
+  --spacing-06: 1.5rem;   /* 24px */
+  --spacing-07: 2rem;     /* 32px */
+  --spacing-08: 2.5rem;   /* 40px */
+  --spacing-09: 3rem;     /* 48px */
+  --spacing-10: 4rem;     /* 64px */
+
+  /* Radius */
+  --radius-01: 0.25rem;
+  --radius-02: 0.5rem;
+  --radius-03: 0.75rem;
+  --radius-04: 1rem;
+  --radius-05: 1.5rem;
+  --radius-07: 2rem;
+  --radius-full: 9999px;
+
+  /* Font */
+  --font-pretendard: "Pretendard", ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-pretendard);
+  letter-spacing: -0.5px;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}

@@ -5,9 +5,9 @@
 | 항목 | 내용 |
 |------|------|
 | 문서명 | PINCH API 명세 |
-| 버전 | v0.3.0 |
+| 버전 | v0.4.0 |
 | 작성일 | 2026-05-21 |
-| 기반 문서 | .claude/설계서.md, .claude/plans/01-mobile-login-flow.md, .claude/plans/02-refresh-token-rotation.md, apps/api/prisma/schema.prisma, apps/api/src/auth/auth.controller.ts, apps/api/src/auth/auth.service.ts |
+| 기반 문서 | .claude/설계서.md, .claude/plans/01-mobile-login-flow.md, .claude/plans/02-refresh-token-rotation.md, .claude/plans/03-web-client-bootstrap.md, apps/api/prisma/schema.prisma, apps/api/src/auth/auth.controller.ts, apps/api/src/auth/auth.service.ts |
 
 ### 변경 이력
 
@@ -16,6 +16,7 @@
 | v0.1.0 | 2026-05-11 | — | 5개 핵심 엔드포인트 초안 정의 (Auth / Job Search / Apply / Check-in / Settlement) |
 | v0.2.0 | 2026-05-21 | — | §3.1 Auth 전면 재작성 — 핸드폰 OTP(`/auth/otp/send`, `/auth/otp/verify`) 제거. 이메일+비밀번호 자체 인증(`/auth/login`, `/auth/signup`) + 카카오 OAuth(`/auth/oauth/kakao`) + JWT 검증(`/auth/me`) 도입. JWT payload `phone` → `email` 전환. user 응답에서 `phone` 제거, `email`/`name`/`isVerified` 포함. `refreshToken` 은 미발급(F-07 별도). 응답 envelope 미적용(현 컨트롤러 직접 반환). §6 Slice 활성화 일정에 Auth 를 Slice 2 로 끌어올림 (자체/카카오 인증은 NICE/다날 외부 인프라 의존 없음). [기반: plans/01-mobile-login-flow.md v0.2.0] |
 | v0.3.0 | 2026-05-21 | — | F-07 적용 — §3.1 에 `POST /auth/refresh` + `POST /auth/logout` 추가. `/auth/login` · `/auth/signup` · `/auth/oauth/kakao` 응답에 `refreshToken` 필드 포함. JWT access 토큰 TTL `1d` → `15m` 단축, refresh 14d. Reuse 감지 정책(REFRESH_REUSE_DETECTED 시 user 의 모든 활성 refresh 무효화) 명시. §6 Slice 활성화 일정에서 `/auth/refresh` 를 Slice 2 로 이동(F-11 OTP 만 Slice 3 잔류). [기반: plans/02-refresh-token-rotation.md v0.1.0] |
+| v0.4.0 | 2026-05-21 | — | W1 적용 — §6 Slice 활성화 일정에 `apps/web` 사업주 부트스트랩 명시 (consumer 추가, 신규 endpoint 없음). `/auth/login` 이 워커앱(role=WORKER)과 사업주웹(role=CLIENT) 양쪽 진입점으로 공용됨을 명시. 사업주는 응답 `user.role === 'CLIENT'` 인지 클라이언트가 추가 검증. [기반: plans/03-web-client-bootstrap.md v0.1.0] |
 
 ---
 
@@ -658,13 +659,13 @@ PENDING ──apply()──▶ MATCHED ──check-in──▶ CHECKED_IN ──
 
 ## 6. Slice 별 활성화 일정
 
-| Slice | 활성 엔드포인트 |
-|---|---|
-| Slice 1 | `POST /matches/apply` |
-| **Slice 2 (현재)** | Auth: `/auth/signup`, `/auth/login`, `/auth/oauth/kakao`, `/auth/me`, **`/auth/refresh`**, **`/auth/logout`** · Jobs/Matches: `/jobs/search`, `/jobs/:id`, `/matches/:id/qr`, `/matches/:id/check-in`, `/matches/:id/check-out`, `/matches/:id/approve` |
-| Slice 3 | `/auth/otp/*` (F-11 NICE/다날), `/wallet/*` |
+| Slice | 활성 엔드포인트 | Consumer |
+|---|---|---|
+| Slice 1 | `POST /matches/apply` | `apps/mobile` |
+| **Slice 2 (현재)** | Auth: `/auth/signup`, `/auth/login`, `/auth/oauth/kakao`, `/auth/me`, `/auth/refresh`, `/auth/logout` · Jobs/Matches: `/jobs/search`, `/jobs/:id`, `/matches/:id/qr`, `/matches/:id/check-in`, `/matches/:id/check-out`, `/matches/:id/approve` | `apps/mobile` (워커) + **`apps/web` (사업주, W1)** |
+| Slice 3 | `/auth/otp/*` (F-11 NICE/다날), `/wallet/*` | `apps/mobile` |
 
-> v0.3.0: Refresh Token 회전(F-07) 이 Slice 2 로 합류했다. NICE/다날 본인 인증만 Slice 3 잔류.
+> v0.4.0: `/auth/login` 은 워커앱과 사업주웹의 공통 진입점. 클라이언트가 응답 `user.role` 로 도메인 검증 (워커앱: WORKER, 사업주웹: CLIENT). 사업주 회원가입(사업자등록번호 검증) 은 W2 별도 endpoint 신설 예정.
 
 ---
 
