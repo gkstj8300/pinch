@@ -1,0 +1,18 @@
+{
+  "name": "@pinch/brand-assets",
+  "version": "0.1.0",
+  "description": "PINCH 브랜드 자산 — 폰트(Pretendard 9종) + 로고 + favicon. apps/mobile · apps/web 공용.",
+  "private": true,
+  "files": [
+    "fonts",
+    "logo",
+    "favicon",
+    "index.ts"
+  ],
+  "exports": {
+    ".": "./index.ts",
+    "./fonts/*": "./fonts/*",
+    "./logo/*": "./logo/*",
+    "./favicon/*": "./favicon/*"
+  }
+}

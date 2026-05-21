@@ -9,7 +9,7 @@ import type { NextConfig } from 'next';
  */
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@pinch/ui-tokens'],
+  transpilePackages: ['@pinch/ui-tokens', '@pinch/brand-assets'],
 };
 
 export default nextConfig;

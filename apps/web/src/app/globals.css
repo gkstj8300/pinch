@@ -73,8 +73,9 @@
   --radius-07: 2rem;
   --radius-full: 9999px;
 
-  /* Font */
-  --font-pretendard: "Pretendard", ui-sans-serif, system-ui, sans-serif;
+  /* Font — next/font/local 이 var(--font-pretendard) 를 자동 주입.
+     fallback 은 시스템 sans-serif. */
+  --font-sans: var(--font-pretendard, ui-sans-serif), ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
@@ -85,7 +86,7 @@ html,
 body {
   margin: 0;
   padding: 0;
-  font-family: var(--font-pretendard);
+  font-family: var(--font-sans);
   letter-spacing: -0.5px;
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
