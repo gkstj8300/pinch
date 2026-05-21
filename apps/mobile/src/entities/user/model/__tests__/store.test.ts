@@ -1,5 +1,11 @@
 import { useAuthStore, clearSession } from '../store';
-import { getAccessToken, setAccessToken } from '@/shared/api/apiClient';
+import {
+  apiClient,
+  getAccessToken,
+  getRefreshToken,
+  setAccessToken,
+  setRefreshToken,
+} from '@/shared/api/apiClient';
 import type { AuthUser } from '../types';
 
 const sampleUser: AuthUser = {
@@ -42,15 +48,45 @@ describe('clearSession', () => {
   beforeEach(async () => {
     useAuthStore.setState({ user: sampleUser });
     await setAccessToken('stale-jwt-token');
+    await setRefreshToken('stale-refresh-token');
+    jest.restoreAllMocks();
   });
 
-  it('removes both the SecureStore token and the zustand user', async () => {
+  it('refresh 가 있으면 /auth/logout 호출 + 양 토큰 + user 모두 무효화', async () => {
+    const postSpy = jest.spyOn(apiClient, 'post').mockResolvedValueOnce({ data: '' } as never);
+
     await clearSession();
+
+    expect(postSpy).toHaveBeenCalledWith('/auth/logout', {
+      refreshToken: 'stale-refresh-token',
+    });
+    expect(useAuthStore.getState().user).toBeNull();
+    await expect(getAccessToken()).resolves.toBeNull();
+    await expect(getRefreshToken()).resolves.toBeNull();
+  });
+
+  it('refresh 가 없으면 /auth/logout 호출 안 함, 로컬만 무효화', async () => {
+    await setRefreshToken(null);
+    const postSpy = jest.spyOn(apiClient, 'post');
+
+    await clearSession();
+
+    expect(postSpy).not.toHaveBeenCalled();
     expect(useAuthStore.getState().user).toBeNull();
     await expect(getAccessToken()).resolves.toBeNull();
   });
 
+  it('/auth/logout 네트워크 실패에도 로컬 무효화는 끝까지 수행 (best-effort)', async () => {
+    jest.spyOn(apiClient, 'post').mockRejectedValueOnce(new Error('Network Error'));
+
+    await expect(clearSession()).resolves.toBeUndefined();
+    expect(useAuthStore.getState().user).toBeNull();
+    await expect(getAccessToken()).resolves.toBeNull();
+    await expect(getRefreshToken()).resolves.toBeNull();
+  });
+
   it('is idempotent — running twice does not throw', async () => {
+    jest.spyOn(apiClient, 'post').mockResolvedValue({ data: '' } as never);
     await clearSession();
     await expect(clearSession()).resolves.toBeUndefined();
     expect(useAuthStore.getState().user).toBeNull();

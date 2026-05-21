@@ -1,6 +1,11 @@
 import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api';
-import { setAccessToken, useAuthStore, type UserRole } from '@/entities/user';
+import {
+  setAccessToken,
+  setRefreshToken,
+  useAuthStore,
+  type UserRole,
+} from '@/entities/user';
 
 interface KakaoOAuthRequest {
   code: string;
@@ -9,6 +14,7 @@ interface KakaoOAuthRequest {
 
 interface KakaoOAuthResponse {
   accessToken: string;
+  refreshToken: string;
   user: {
     id: string;
     email: string;
@@ -24,7 +30,7 @@ async function kakaoOAuthFn(req: KakaoOAuthRequest): Promise<KakaoOAuthResponse>
 }
 
 /**
- * 카카오 인가 코드 → 백엔드 토큰 교환 → PINCH JWT 발급.
+ * 카카오 인가 코드 → 백엔드 토큰 교환 → PINCH access+refresh 발급.
  *   - 신규 사용자면 백엔드가 자동 가입 (oauth_provider='kakao')
  *   - 같은 이메일이 password 가입돼 있으면 409 EMAIL_TAKEN_BY_LOCAL
  *   - 카카오 측 오류는 502 KAKAO_API_ERROR
@@ -36,6 +42,7 @@ export function useKakaoOAuthMutation() {
     mutationFn: kakaoOAuthFn,
     onSuccess: async (data) => {
       await setAccessToken(data.accessToken);
+      await setRefreshToken(data.refreshToken);
       const { id, email, name, role } = data.user;
       setUser({ id, email, name, role });
     },

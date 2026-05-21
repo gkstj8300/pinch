@@ -1,6 +1,11 @@
 import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api';
-import { setAccessToken, useAuthStore, type UserRole } from '@/entities/user';
+import {
+  setAccessToken,
+  setRefreshToken,
+  useAuthStore,
+  type UserRole,
+} from '@/entities/user';
 
 interface LoginRequest {
   email: string;
@@ -9,6 +14,7 @@ interface LoginRequest {
 
 interface LoginResponse {
   accessToken: string;
+  refreshToken: string;
   user: {
     id: string;
     email: string;
@@ -25,7 +31,7 @@ async function loginFn(req: LoginRequest): Promise<LoginResponse> {
 
 /**
  * 이메일/비밀번호 로그인.
- *   - 성공 시 SecureStore 에 JWT 저장 + Zustand user 갱신
+ *   - 성공 시 SecureStore 에 access+refresh 한 쌍 저장 + Zustand user 갱신
  *   - 실패는 caller 가 mutation.error 로 분기 (LoginForm 에서 apiError 메시지화)
  */
 export function useLoginMutation() {
@@ -35,6 +41,7 @@ export function useLoginMutation() {
     mutationFn: loginFn,
     onSuccess: async (data) => {
       await setAccessToken(data.accessToken);
+      await setRefreshToken(data.refreshToken);
       const { id, email, name, role } = data.user;
       setUser({ id, email, name, role });
     },

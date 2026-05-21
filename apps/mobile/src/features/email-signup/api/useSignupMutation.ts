@@ -1,6 +1,11 @@
 import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api';
-import { setAccessToken, useAuthStore, type UserRole } from '@/entities/user';
+import {
+  setAccessToken,
+  setRefreshToken,
+  useAuthStore,
+  type UserRole,
+} from '@/entities/user';
 
 interface SignupRequest {
   email: string;
@@ -12,6 +17,7 @@ interface SignupRequest {
 
 interface SignupResponse {
   accessToken: string;
+  refreshToken: string;
   user: {
     id: string;
     email: string;
@@ -28,7 +34,7 @@ async function signupFn(req: SignupRequest): Promise<SignupResponse> {
 
 /**
  * 이메일/비밀번호 회원가입 — 성공 시 자동 로그인 (백엔드가 동일 응답 형태로
- * accessToken+user 를 반환). 클라이언트는 토큰·user 저장만 수행.
+ * access+refresh+user 를 반환). 클라이언트는 토큰·user 저장만 수행.
  */
 export function useSignupMutation() {
   const setUser = useAuthStore((s) => s.setUser);
@@ -37,6 +43,7 @@ export function useSignupMutation() {
     mutationFn: signupFn,
     onSuccess: async (data) => {
       await setAccessToken(data.accessToken);
+      await setRefreshToken(data.refreshToken);
       const { id, email, name, role } = data.user;
       setUser({ id, email, name, role });
     },
