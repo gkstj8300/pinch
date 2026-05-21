@@ -5,9 +5,9 @@
 | 항목 | 내용 |
 |------|------|
 | 문서명 | PINCH API 명세 |
-| 버전 | v0.4.0 |
+| 버전 | v0.5.0 |
 | 작성일 | 2026-05-21 |
-| 기반 문서 | .claude/설계서.md, .claude/plans/01-mobile-login-flow.md, .claude/plans/02-refresh-token-rotation.md, .claude/plans/03-web-client-bootstrap.md, apps/api/prisma/schema.prisma, apps/api/src/auth/auth.controller.ts, apps/api/src/auth/auth.service.ts |
+| 기반 문서 | .claude/설계서.md, .claude/plans/01-mobile-login-flow.md, .claude/plans/02-refresh-token-rotation.md, .claude/plans/03-web-client-bootstrap.md, .claude/plans/04-job-management.md, apps/api/prisma/schema.prisma, apps/api/src/auth/auth.controller.ts, apps/api/src/auth/auth.service.ts, apps/api/src/jobs/jobs.controller.ts, apps/api/src/jobs/jobs.service.ts |
 
 ### 변경 이력
 
@@ -17,6 +17,7 @@
 | v0.2.0 | 2026-05-21 | — | §3.1 Auth 전면 재작성 — 핸드폰 OTP(`/auth/otp/send`, `/auth/otp/verify`) 제거. 이메일+비밀번호 자체 인증(`/auth/login`, `/auth/signup`) + 카카오 OAuth(`/auth/oauth/kakao`) + JWT 검증(`/auth/me`) 도입. JWT payload `phone` → `email` 전환. user 응답에서 `phone` 제거, `email`/`name`/`isVerified` 포함. `refreshToken` 은 미발급(F-07 별도). 응답 envelope 미적용(현 컨트롤러 직접 반환). §6 Slice 활성화 일정에 Auth 를 Slice 2 로 끌어올림 (자체/카카오 인증은 NICE/다날 외부 인프라 의존 없음). [기반: plans/01-mobile-login-flow.md v0.2.0] |
 | v0.3.0 | 2026-05-21 | — | F-07 적용 — §3.1 에 `POST /auth/refresh` + `POST /auth/logout` 추가. `/auth/login` · `/auth/signup` · `/auth/oauth/kakao` 응답에 `refreshToken` 필드 포함. JWT access 토큰 TTL `1d` → `15m` 단축, refresh 14d. Reuse 감지 정책(REFRESH_REUSE_DETECTED 시 user 의 모든 활성 refresh 무효화) 명시. §6 Slice 활성화 일정에서 `/auth/refresh` 를 Slice 2 로 이동(F-11 OTP 만 Slice 3 잔류). [기반: plans/02-refresh-token-rotation.md v0.1.0] |
 | v0.4.0 | 2026-05-21 | — | W1 적용 — §6 Slice 활성화 일정에 `apps/web` 사업주 부트스트랩 명시 (consumer 추가, 신규 endpoint 없음). `/auth/login` 이 워커앱(role=WORKER)과 사업주웹(role=CLIENT) 양쪽 진입점으로 공용됨을 명시. 사업주는 응답 `user.role === 'CLIENT'` 인지 클라이언트가 추가 검증. [기반: plans/03-web-client-bootstrap.md v0.1.0] |
+| v0.5.0 | 2026-05-21 | — | W3 적용 — §3.2 에 `POST /jobs` (사업주 공고 등록, CLIENT 전용) + `GET /jobs/my` (사업주 본인 공고 offset 페이지네이션) 신설 명세 추가. `GET /jobs/:id` 의 응답에 `description` 노출 명시. 백엔드는 `startAt < endAt` + `startAt > now` 검증. estimatedMinutes 는 startAt/endAt 차이로 자동 계산. ownership(client_id) 는 JWT sub 로 자동. 카카오 로컬 API 통합은 `apps/web` 클라이언트에서 직접 호출 (백엔드 변경 없음). [기반: plans/04-job-management.md v0.1.0] |
 
 ---
 
@@ -385,7 +386,93 @@ interface RefreshJwtPayload {
 
 공고 상세.
 
-**Response (200):** `Job` 객체 전체. (필드는 위 search 응답과 동일 + `description`)
+**Response (200):** `Job` 객체 전체. (필드는 위 search 응답과 동일 + `description`. 사업주 정보 `client: { id, name, ratingAvg, totalReviews }` 포함)
+
+**Auth:** Bearer (워커·사업주 누구나 인증된 사용자면 조회 가능 — 매칭 흐름에 필요). 본인 공고 한정 가드는 클라이언트 UX 차원에서 적용 (W3).
+
+---
+
+#### `POST /jobs`
+
+사업주 공고 등록 (W3). `client_id` 는 JWT `sub` 로 자동 할당 — body 에 명시해도 무시.
+
+**Auth:** Bearer + `role === 'CLIENT'`
+
+**Request:**
+
+```json
+{
+  "title": "카페 홀 서빙 (1시간)",
+  "description": "오후 피크 타임 1시간 서빙 도와주실 분 모집합니다.",
+  "category": "F&B",
+  "address": "서울 중구 세종대로 110",
+  "latitude": 37.56635,
+  "longitude": 126.97791,
+  "startAt": "2026-05-22T15:30:00+09:00",
+  "endAt": "2026-05-22T16:30:00+09:00",
+  "hourlyWage": 12000,
+  "recruitCount": 1
+}
+```
+
+| 필드 | 타입 | 필수 | 검증 |
+|---|---|---|---|
+| `title` | string | ✓ | 5~120자 |
+| `description` | string | ✓ | 10~1000자 |
+| `category` | string | ✓ | 1~40자 (자유 입력) |
+| `address` | string | ✓ | 1~255자 |
+| `latitude` | number | ✓ | -90 ~ 90 |
+| `longitude` | number | ✓ | -180 ~ 180 |
+| `startAt` | ISO 8601 | ✓ | `endAt` 보다 이전 + 현재 시점 이후 |
+| `endAt` | ISO 8601 | ✓ | — |
+| `hourlyWage` | int | ✓ | 10,030 (2026 KR 최저시급) ~ 1,000,000 |
+| `recruitCount` | int | ✓ | 1 ~ 50 |
+
+> `estimatedMinutes` 는 서버가 `(endAt - startAt) / 60_000` 으로 자동 계산.
+> PostGIS `location` 컬럼은 DB 트리거로 lat/lng 에서 동기화.
+> `latitude`/`longitude` 는 `apps/web` 의 경우 카카오 로컬 API (`dapi.kakao.com/v2/local/search/address`) 결과를 채워 전달.
+
+**Response (201):** 생성된 Job (findOne 응답과 동일 shape, `client` 정보 제외)
+
+**Errors:**
+
+| HTTP | code | 시나리오 |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | DTO 검증 실패 |
+| 400 | `INVALID_TIME_RANGE` | startAt >= endAt |
+| 400 | `START_IN_PAST` | startAt < now |
+| 401 | `UNAUTHENTICATED` | JWT 누락 |
+| 403 | `CLIENT_ONLY` | role !== 'CLIENT' |
+
+---
+
+#### `GET /jobs/my`
+
+사업주 본인 공고 목록 (W3). offset 페이지네이션.
+
+**Auth:** Bearer + `role === 'CLIENT'`
+
+**Query Parameters:**
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `page` | int | | 1부터, 기본 1 |
+| `limit` | int | | 1~50, 기본 20 |
+
+**Response (200):**
+
+```json
+{
+  "items": [ /* Job[] (description 미포함, search 응답과 유사) */ ],
+  "total": 42,
+  "page": 1,
+  "limit": 20
+}
+```
+
+> 정렬: `created_at DESC` 고정 (1차는 옵션 없음). soft-deleted 제외.
+
+**Errors:** `400 VALIDATION_ERROR`, `401 UNAUTHENTICATED`, `403 CLIENT_ONLY`
 
 ---
 

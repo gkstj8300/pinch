@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/shared/ui';
 import {
@@ -11,10 +12,9 @@ import {
 } from '@/entities/user';
 
 /**
- * 빈 대시보드 — 1차 부트스트랩.
- *  - 토큰 무효 시 useMeQuery 가 401 → apiClient 자동 refresh → 실패 시 /login 으로
- *  - 사용자 정보 표시 + 로그아웃 버튼
- *  - 사업주(CLIENT) 가 아닌 사용자가 우회 진입한 경우도 /login 으로 리다이렉트
+ * 사업주 대시보드 (placeholder).
+ *  - 토큰 무효/role 불일치 시 /login 으로
+ *  - "내 공고" / "공고 등록" 진입 카드
  */
 export default function HomePage() {
   const router = useRouter();
@@ -25,7 +25,6 @@ export default function HomePage() {
   useEffect(() => {
     if (data) {
       if (data.role !== 'CLIENT') {
-        // 사업주 도메인에 워커/관리자 우회 진입 — 강제 로그아웃
         void clearSession().then(() => router.replace('/login'));
         return;
       }
@@ -34,10 +33,7 @@ export default function HomePage() {
   }, [data, router]);
 
   useEffect(() => {
-    if (error) {
-      // /auth/me 가 401 → apiClient interceptor 가 refresh 후 재시도 후에도 실패
-      router.replace('/login');
-    }
+    if (error) router.replace('/login');
   }, [error, router]);
 
   const handleLogout = async () => {
@@ -68,21 +64,34 @@ export default function HomePage() {
           </Button>
         </div>
       </header>
+
       <section className="mx-auto max-w-3xl px-(--spacing-04) py-(--spacing-09)">
-        <div className="rounded-(--radius-04) bg-(--color-bg-primary) p-(--spacing-07) text-center">
-          {isLoading ? (
-            <p className="text-(--color-text-secondary)">로딩 중...</p>
-          ) : (
-            <>
-              <h2 className="text-2xl font-bold text-(--color-text-primary)">
-                환영합니다{currentUser !== null ? `, ${currentUser.email}` : ''}!
-              </h2>
-              <p className="mt-(--spacing-03) text-(--color-text-secondary)">
-                공고 등록·관리, 출퇴근 모니터링, 정산 기능은 다음 업데이트에서 제공됩니다.
+        {isLoading ? (
+          <p className="text-center text-(--color-text-secondary)">로딩 중...</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-(--spacing-05) sm:grid-cols-2">
+            <Link
+              href="/jobs"
+              className="flex flex-col gap-(--spacing-02) rounded-(--radius-04) bg-(--color-bg-primary) p-(--spacing-07) transition-colors hover:bg-(--color-bg-tertiary)"
+            >
+              <h2 className="text-lg font-bold text-(--color-text-primary)">내 공고</h2>
+              <p className="text-sm text-(--color-text-secondary)">
+                등록한 공고를 확인하고 진행 상황을 살펴보세요.
               </p>
-            </>
-          )}
-        </div>
+            </Link>
+            <Link
+              href="/jobs/new"
+              className="flex flex-col gap-(--spacing-02) rounded-(--radius-04) bg-(--color-bg-identity-sub) p-(--spacing-07) transition-colors hover:opacity-80"
+            >
+              <h2 className="text-lg font-bold text-(--color-text-identity-strong)">
+                공고 등록
+              </h2>
+              <p className="text-sm text-(--color-text-identity-strong)">
+                새 공고를 작성하고 워커를 매칭받아보세요.
+              </p>
+            </Link>
+          </div>
+        )}
       </section>
     </main>
   );
