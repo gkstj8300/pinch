@@ -8,11 +8,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 /**
- * PINCH 디자인 토큰 Button.
- *   - primary: identity pink (#fa2454)
+ * PINCH 디자인 토큰 Button — Figma `node-id=521:22635` 매핑.
+ *   - primary: identity-hover (#ef0035)
  *   - secondary: gray-80 (#2e3236)
- *   - disabled: gray-30 자동 적용
- *   - hover/active 색상은 토큰 그대로
+ *   - disabled: 동일 bg + opacity 40% (Figma 표준)
+ *   - height 48px (h-12), radius 6px (--radius-015), gap 6px
  */
 export function Button({
   variant = 'primary',
@@ -22,21 +22,19 @@ export function Button({
   children,
   ...rest
 }: ButtonProps) {
-  const base = 'h-12 rounded-(--radius-03) px-(--spacing-05) font-semibold transition-colors';
+  const base =
+    'inline-flex h-12 items-center justify-center gap-(--spacing-015) rounded-(--radius-015) px-(--spacing-03) py-(--spacing-02) text-base font-semibold transition-colors';
   const sizing = fullWidth ? 'w-full' : '';
   const variants: Record<Variant, string> = {
-    primary: disabled
-      ? 'bg-(--color-gray-30) text-(--color-text-quaternary) cursor-not-allowed'
-      : 'bg-(--color-identity) text-(--color-text-inverse) hover:bg-(--color-identity-hover)',
-    secondary: disabled
-      ? 'bg-(--color-gray-30) text-(--color-text-quaternary) cursor-not-allowed'
-      : 'bg-(--color-gray-80) text-(--color-text-inverse) hover:bg-(--color-gray-70)',
+    primary: 'bg-(--color-identity-hover) text-(--color-text-inverse) hover:bg-(--color-identity)',
+    secondary: 'bg-(--color-gray-80) text-(--color-text-inverse) hover:bg-(--color-gray-70)',
   };
+  const stateModifiers = disabled ? 'opacity-40 cursor-not-allowed' : '';
   return (
     <button
       type="button"
       disabled={disabled}
-      className={`${base} ${sizing} ${variants[variant]} ${className}`.trim()}
+      className={`${base} ${sizing} ${variants[variant]} ${stateModifiers} ${className}`.trim()}
       {...rest}
     >
       {children}
